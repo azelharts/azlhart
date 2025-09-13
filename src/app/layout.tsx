@@ -33,6 +33,7 @@ export default function RootLayout({
         smooth: 1,
         smoothTouch: 0.25,
         effects: true,
+        normalizeScroll: true,
       });
     },
     { dependencies: [pathname], revertOnUpdate: true }
