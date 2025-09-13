@@ -18,6 +18,13 @@ const Home = () => {
 
   useGSAP(() => {
     gsap.registerPlugin(DrawSVGPlugin, SplitText, ScrollTrigger);
+
+    const headingSplit = SplitText.create(".slide-up", {
+      type: "lines",
+      autoSplit: true,
+      mask: "lines",
+    });
+
     const getInitialDimensions = () => {
       const width = window.innerWidth;
       if (width >= 1256) {
@@ -51,12 +58,6 @@ const Home = () => {
       bottom,
       x,
     } = getInitialDimensions();
-
-    const headingSplit = SplitText.create(".slide-up", {
-      type: "lines",
-      autoSplit: true,
-      mask: "lines",
-    });
 
     gsap.set("#azlhart-logo", {
       position: "absolute",
@@ -122,7 +123,7 @@ const Home = () => {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="h-[100vh] flex flex-col" ref={heroSectionRef}>
+      <section className="h-[100dvh] flex flex-col" ref={heroSectionRef}>
         {/* Container */}
         <div className="max-w-[1580px] relative h-full p-container w-full mx-auto">
           <div className="grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 gap-y-8 h-full">
