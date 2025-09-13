@@ -61,7 +61,7 @@ const Home = () => {
     gsap.set("#azlhart-logo", {
       position: "absolute",
       left: "50%",
-      bottom: "50%",
+      bottom: "40%",
       xPercent: -50,
       yPercent: -50,
       width: initialWidth,
@@ -76,6 +76,7 @@ const Home = () => {
     })
       .to("#azlhart-logo", {
         duration: 1.5,
+        fill: "FFF",
         ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
         width: widthAfter ? widthAfter : 650,
         height: heightAfter ? heightAfter : 350,
@@ -89,7 +90,7 @@ const Home = () => {
           y: "35%",
           opacity: 0,
           stagger: 0.075,
-          ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
+          ease: "power2.inOut",
         },
         "-=1"
       )
@@ -104,7 +105,7 @@ const Home = () => {
           y: "35%",
           opacity: 0,
           stagger: 0.075,
-          ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
+          ease: "power2.inOut",
         },
         "-=1.5"
       )
@@ -137,7 +138,7 @@ const Home = () => {
                   <p>Kupang, East Nusa Tenggara</p>
                   <RollingText
                     href="mailto:hello@azlhart.com"
-                    className="font-bold"
+                    className="font-[BricolageGrotesqueBold]"
                   >
                     hello@azlhart.com
                   </RollingText>
@@ -145,7 +146,10 @@ const Home = () => {
               </div>
             </header>
 
-            <h2 className="font-[DrukWide] text-2xl tablet:text-4xl desktop:text-5xl col-span-full tablet:col-start-4 desktop:col-start-7 z-10 tablet:-translate-y-20 desktop:-translate-y-0 slide-up">
+            <h2
+              className="font-[DrukWide] text-2xl tablet:text-4xl desktop:text-5xl col-span-full tablet:col-start-4 desktop:col-start-7 z-10 tablet:-translate-y-20 desktop:-translate-y-0 slide-up"
+              data-lag="0.15"
+            >
               “Turning brand <br />
               into tab everyone <br />
               keeps open”
@@ -154,13 +158,22 @@ const Home = () => {
             <div className="flex flex-col items-end gap-y-4 tablet:gap-y-8 justify-end col-span-full z-10">
               <div className="grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 w-full tablet:text-lg">
                 <div className="flex justify-end gap-x-3 tablet:gap-x-7 tablet:text-lg desktop:text-xl col-span-3 tablet:col-span-4 col-end-5 tablet:col-end-8">
-                  <span className="slide-up">Independent</span>
-                  <span className="slide-up">Creative</span>
-                  <span className="slide-up">Studio</span>
+                  <span className="slide-up" data-lag="0.2">
+                    Independent
+                  </span>
+                  <span className="slide-up" data-lag="0.25">
+                    Creative
+                  </span>
+                  <span className="slide-up" data-lag="0.3">
+                    Studio
+                  </span>
                 </div>
               </div>
 
-              <h1 className="text-7xl tablet:text-[9rem] desktop:text-[16rem] font-[DrukWide] slide-up cursor-default">
+              <h1
+                className="text-7xl tablet:text-[9rem] desktop:text-[16rem] font-[DrukWide] slide-up cursor-default"
+                data-lag="0.45"
+              >
                 azlhart
               </h1>
             </div>

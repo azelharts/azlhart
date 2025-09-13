@@ -23,6 +23,11 @@
     font-family: BricolageGrotesque;
     src: url("/fonts/BricolageGrotesque-Light.ttf");
   }
+
+  @font-face {
+    font-family: BricolageGrotesqueBold;
+    src: url("/fonts/BricolageGrotesque-Bold.ttf");
+  }
 }
 
 body {

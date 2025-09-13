@@ -13,13 +13,13 @@ const Navbar = () => {
       <div className="hidden tablet:flex justify-end gap-x-11 col-span-3 col-end-7">
         <div className="flex items-center gap-x-6 fade-up-2">
           <span>01</span>
-          <RollingText href="/work" className="font-bold">
+          <RollingText href="/work" className="font-[BricolageGrotesqueBold]">
             work
           </RollingText>
         </div>
         <div className="flex items-center gap-x-6 fade-up-2">
           <span>02</span>
-          <RollingText href="/about" className="font-bold">
+          <RollingText href="/about" className="font-[BricolageGrotesqueBold]">
             about
           </RollingText>
         </div>
@@ -27,7 +27,7 @@ const Navbar = () => {
       <div className="hidden tablet:flex justify-end col-span-2 col-end-9">
         <div className="flex items-center gap-x-6 cursor-pointer fade-up-2">
           <ArrowRight width={20} height={20} strokeWidth={1} />
-          <RollingText as="button" className="font-bold">
+          <RollingText as="button" className="font-[BricolageGrotesqueBold]">
             get in touch
           </RollingText>
         </div>

@@ -25,8 +25,6 @@ export default function RootLayout({
 }>) {
   const pathname = usePathname();
 
-  const [paused, setPaused] = useState(true);
-
   useGSAP(
     () => {
       ScrollSmoother.create({
