@@ -21,7 +21,6 @@ const Home = () => {
 
     const headingSplit = SplitText.create(".slide-up", {
       type: "lines",
-      autoSplit: true,
       mask: "lines",
     });
 
