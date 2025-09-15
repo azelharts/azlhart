@@ -2,7 +2,7 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #2c2c2c;
 }
 
 @theme inline {
@@ -39,8 +39,12 @@ body {
   @apply absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2;
 }
 
-.absolute-center-y {
+.absolute-center-x {
   @apply absolute left-1/2 -translate-x-1/2;
+}
+
+.absolute-center-y {
+  @apply absolute left-1/2 -translate-y-1/2;
 }
 
 .p-container {

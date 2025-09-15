@@ -1,22 +1,19 @@
 "use client";
 
 import "./globals.css";
+
+import { usePathname } from "next/navigation";
+
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import ScrollTrigger from "gsap/dist/ScrollTrigger";
 import ScrollSmoother from "gsap/dist/ScrollSmoother";
-import { usePathname } from "next/navigation";
+
 import Navbar from "@/components/Navbar";
-import { useState } from "react";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
 }
-
-// export const metadata: Metadata = {
-//   title: "Azlhart® - Independent Creative Studio",
-//   description: "",
-// };
 
 export default function RootLayout({
   children,
@@ -39,8 +36,10 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <head />
-      <body className={`font-[BricolageGrotesque] antialiased`}>
+      <head>
+        <title>Azlhart® - Independent Creative Studio</title>
+      </head>
+      <body className={`font-[BricolageGrotesque] antialiased relative`}>
         <Navbar />
         <div id="smooth-wrapper">
           <div id="smooth-content">{children}</div>
