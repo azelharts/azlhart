@@ -9,7 +9,6 @@ import { useGSAP } from "@gsap/react";
 import DrawSVGPlugin from "gsap/dist/DrawSVGPlugin";
 import CustomEase from "gsap/dist/CustomEase";
 
-import RollingText from "./RollingText";
 import LogoSVG from "./LogoSVG";
 
 import { ArrowRight } from "lucide-react";
@@ -25,7 +24,7 @@ const Navbar = () => {
 
     gsap.from(navRef.current, { autoAlpha: 0 });
 
-    gsap.from(logoPathRef.current, {
+    gsap.from([logoPathRef.current, "#logo-link"], {
       scrollTrigger: {
         trigger: "#hero-header",
         start: "bottom top",
@@ -34,6 +33,7 @@ const Navbar = () => {
       duration: 0.75,
       ease: "power4.inOut",
       drawSVG: 0,
+      autoAlpha: 0,
     });
   }, {});
 
@@ -65,6 +65,8 @@ const Navbar = () => {
         href="/"
         onMouseEnter={handleLogoMouseEnter}
         onMouseLeave={handleLogoMouseLeave}
+        id="logo-link"
+        className="invisible"
       >
         <LogoSVG
           refs={[logoRef, logoPathRef]}
@@ -76,9 +78,9 @@ const Navbar = () => {
       {/* CTA */}
       <div className="flex items-start justify-end self-start gap-x-2 cursor-pointer col-span-2 col-end-4 text-xs tablet:hidden fade-up-2">
         <ArrowRight width={18} height={18} strokeWidth={1} />
-        <RollingText as="button" className="font-[BricolageGrotesqueBold]">
-          let&apos;s talk
-        </RollingText>
+        <Link href="/work">
+          <ScrambleText text="let's talk" />
+        </Link>
       </div>
 
       {/* Nav Links */}
