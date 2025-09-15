@@ -45,11 +45,9 @@ const RollingText = (props: RollingTextProps) => {
         // Split text into characters
         const originalSplit = new SplitText(originalSpan, {
           type: "chars",
-          autoSplit: true,
         });
         const hoverSplit = new SplitText(hoverSpan, {
           type: "chars",
-          autoSplit: true,
         });
 
         // Set initial positions
@@ -107,14 +105,14 @@ const RollingText = (props: RollingTextProps) => {
         };
 
         // Add event listeners
-        elementRef.current.addEventListener("mouseenter", hoverIn);
-        elementRef.current.addEventListener("mouseleave", hoverOut);
+        elementRef.current.addEventListener("mouseover", hoverIn);
+        elementRef.current.addEventListener("mouseout", hoverOut);
 
         // Cleanup function
         return () => {
           if (elementRef.current) {
-            elementRef.current.removeEventListener("mouseenter", hoverIn);
-            elementRef.current.removeEventListener("mouseleave", hoverOut);
+            elementRef.current.removeEventListener("mouseover", hoverIn);
+            elementRef.current.removeEventListener("mouseout", hoverOut);
           }
         };
       });

@@ -15,11 +15,14 @@ import LogoSVG from "./LogoSVG";
 import { ArrowRight } from "lucide-react";
 
 const Navbar = () => {
+  const navRef = useRef<HTMLElement>(null);
   const logoRef = useRef<SVGSVGElement>(null);
   const logoPathRef = useRef<SVGPathElement>(null);
 
   const { contextSafe } = useGSAP(() => {
     gsap.registerPlugin(DrawSVGPlugin, CustomEase);
+
+    gsap.from(navRef.current, { autoAlpha: 0 });
 
     gsap.from(logoPathRef.current, {
       scrollTrigger: {
@@ -51,7 +54,10 @@ const Navbar = () => {
   });
 
   return (
-    <nav className="fixed max-w-[1580px] top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 grid grid-cols-4 tablet:grid-cols-8 w-full z-50">
+    <nav
+      className="fixed max-w-[1580px] top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 grid grid-cols-4 tablet:grid-cols-8 w-full z-50 invisible"
+      ref={navRef}
+    >
       {/* Logo */}
 
       <Link
@@ -61,7 +67,7 @@ const Navbar = () => {
       >
         <LogoSVG
           refs={[logoRef, logoPathRef]}
-          strokeWidth={4}
+          strokeWidth={8}
           className="col-start-1 max-h-[32px] tablet:max-h-[48px] desktop:max-h-[64px]"
         />
       </Link>

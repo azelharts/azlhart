@@ -14,6 +14,7 @@ import LogoSVG from "@/components/LogoSVG";
 import { getInitialDimensions } from "@/lib/utils";
 
 const HeroSection = () => {
+  const heroRef = useRef<HTMLElement>(null);
   const logoRef = useRef<SVGSVGElement>(null);
   const logoPathRef = useRef<SVGPathElement>(null);
   const slideUpTextRefs = useRef<HTMLElement[]>([]);
@@ -61,11 +62,12 @@ const HeroSection = () => {
         },
       });
 
-      tl.from(logoPathRef.current, {
-        drawSVG: 0,
-        duration: 3.75,
-        ease: "power3.inOut",
-      })
+      tl.from(heroRef.current, { autoAlpha: 0 })
+        .from(logoPathRef.current, {
+          drawSVG: 0,
+          duration: 3.75,
+          ease: "power3.inOut",
+        })
         .to(logoRef.current, {
           duration: 1.5,
           fill: "FFF",
@@ -111,7 +113,7 @@ const HeroSection = () => {
   }, {});
 
   return (
-    <section className="h-[100svh] flex flex-col">
+    <section className="h-[100svh] flex flex-col invisible" ref={heroRef}>
       {/* Container */}
       <div className="max-w-[1580px] relative h-full p-container w-full mx-auto">
         <div className="grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 gap-y-8 h-full">
