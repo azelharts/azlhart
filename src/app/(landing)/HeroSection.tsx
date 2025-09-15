@@ -2,16 +2,18 @@
 
 import { useRef } from "react";
 
+import Link from "next/link";
+
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import DrawSVGPlugin from "gsap/dist/DrawSVGPlugin";
 import SplitText from "gsap/dist/SplitText";
 import CustomEase from "gsap/dist/CustomEase";
 
-import RollingText from "@/components/RollingText";
-import LogoSVG from "@/components/LogoSVG";
-
 import { getInitialDimensions } from "@/lib/utils";
+
+import LogoSVG from "@/components/LogoSVG";
+import ScrambleText from "@/components/ScrambleText";
 
 const HeroSection = () => {
   const heroRef = useRef<HTMLElement>(null);
@@ -129,12 +131,9 @@ const HeroSection = () => {
               </div>
               <div className="flex flex-col gap-y-1 fade-up">
                 <p>Kupang, East Nusa Tenggara</p>
-                <RollingText
-                  href="mailto:hello@azlhart.com"
-                  className="font-[BricolageGrotesqueBold]"
-                >
-                  hello@azlhart.com
-                </RollingText>
+                <Link href="mailto:hello@azlhart.com">
+                  <ScrambleText text="hello@azlhart.com"></ScrambleText>
+                </Link>
               </div>
             </div>
           </header>

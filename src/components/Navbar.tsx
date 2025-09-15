@@ -13,6 +13,7 @@ import RollingText from "./RollingText";
 import LogoSVG from "./LogoSVG";
 
 import { ArrowRight } from "lucide-react";
+import ScrambleText from "./ScrambleText";
 
 const Navbar = () => {
   const navRef = useRef<HTMLElement>(null);
@@ -84,15 +85,15 @@ const Navbar = () => {
       <div className="hidden tablet:flex justify-end self-start gap-x-11 col-span-3 col-end-7">
         <div className="flex items-center gap-x-6 fade-up-2">
           <span>01</span>
-          <RollingText href="/work" className="font-[BricolageGrotesqueBold]">
-            work
-          </RollingText>
+          <Link href="/work">
+            <ScrambleText text="work" />
+          </Link>
         </div>
         <div className="flex items-center gap-x-6 fade-up-2">
           <span>02</span>
-          <RollingText href="/about" className="font-[BricolageGrotesqueBold]">
-            about
-          </RollingText>
+          <Link href="/about">
+            <ScrambleText text="about" />
+          </Link>
         </div>
       </div>
 
@@ -106,9 +107,9 @@ const Navbar = () => {
       <div className="hidden tablet:flex justify-end col-span-2 self-start col-end-9">
         <div className="flex items-center gap-x-6 cursor-pointer fade-up-2">
           <ArrowRight width={20} height={20} strokeWidth={1} />
-          <RollingText as="button" className="font-[BricolageGrotesqueBold]">
-            let&apos;s talk
-          </RollingText>
+          <Link href="/work">
+            <ScrambleText text="let's talk" />
+          </Link>
         </div>
       </div>
     </nav>
