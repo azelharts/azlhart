@@ -1,11 +1,11 @@
 import HeroSection from "./HeroSection";
+import WorkSection from "./WorkSection";
 
 const Home = () => {
-  const enableScroll = () => {};
-
   return (
-    <main className="flex flex-col">
+    <main className="flex flex-col gap-y-40 desktop:gap-y-44">
       <HeroSection />
+      <WorkSection />
       <section className="h-[100vh] w-full hidden sub-sections"></section>
     </main>
   );

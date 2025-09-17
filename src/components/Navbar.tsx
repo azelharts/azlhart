@@ -41,7 +41,7 @@ const Navbar = () => {
     gsap.to(logoRef.current, {
       duration: 0.5,
       ease: "power3.inOut",
-      fill: "#2C2C2C",
+      fill: "#FFFFFF",
       fillOpacity: 1,
     });
   });
@@ -56,7 +56,7 @@ const Navbar = () => {
 
   return (
     <nav
-      className="fixed max-w-[1580px] top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 grid grid-cols-4 tablet:grid-cols-8 w-full z-50 invisible"
+      className="fixed max-w-container top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 custom-grid w-full z-50 invisible mix-blend-difference text-white"
       ref={navRef}
     >
       {/* Logo */}
@@ -71,6 +71,7 @@ const Navbar = () => {
         <LogoSVG
           refs={[logoRef, logoPathRef]}
           strokeWidth={8}
+          strokeColor="#FFFFFF"
           className="col-start-1 max-h-[32px] tablet:max-h-[48px] desktop:max-h-[64px]"
         />
       </Link>
@@ -78,13 +79,13 @@ const Navbar = () => {
       {/* CTA */}
       <div className="flex items-start justify-end self-start gap-x-2 cursor-pointer col-span-2 col-end-4 text-xs tablet:hidden fade-up-2">
         <ArrowRight width={18} height={18} strokeWidth={1} />
-        <Link href="/work">
+        <button>
           <ScrambleText text="let's talk" />
-        </Link>
+        </button>
       </div>
 
       {/* Nav Links */}
-      <div className="hidden tablet:flex justify-end self-start gap-x-11 col-span-3 col-end-7">
+      <div className="hidden tablet:flex justify-end self-start gap-x-11 col-span-3 col-end-8 desktop:col-start-9 desktop:col-end-auto">
         <div className="flex items-center gap-x-6 fade-up-2">
           <span>01</span>
           <Link href="/work">
@@ -101,17 +102,18 @@ const Navbar = () => {
 
       {/* Menu */}
       <div className="flex flex-col items-end gap-y-[6px] self-start tablet:hidden col-end-5">
-        <div className="w-6 h-[2px] rounded-full bg-black fill-width" />
-        <div className="w-6 h-[2px] rounded-full bg-black fill-width" />
-        <div className="w-6 h-[2px] rounded-full bg-black fill-width" />
+        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
+        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
+        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
       </div>
 
-      <div className="hidden tablet:flex justify-end col-span-2 self-start col-end-9">
+      {/* CTA */}
+      <div className="hidden tablet:flex justify-end col-span-2 self-start col-end-13">
         <div className="flex items-center gap-x-6 cursor-pointer fade-up-2">
           <ArrowRight width={20} height={20} strokeWidth={1} />
-          <Link href="/work">
+          <button>
             <ScrambleText text="let's talk" />
-          </Link>
+          </button>
         </div>
       </div>
     </nav>

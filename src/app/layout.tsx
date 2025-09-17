@@ -39,10 +39,12 @@ export default function RootLayout({
       <head>
         <title>Azlhart® - Independent Creative Studio</title>
       </head>
-      <body className={`font-[BricolageGrotesque] antialiased relative`}>
+      <body className="font-[BricolageGrotesque] antialiased relative">
         <Navbar />
         <div id="smooth-wrapper">
-          <div id="smooth-content">{children}</div>
+          <div id="smooth-content" className="mix-blend-multiply">
+            {children}
+          </div>
         </div>
       </body>
     </html>

@@ -4,6 +4,7 @@ declare global {
   interface LogoSVGProps {
     refs: [RefObject<SVGSVGElement | null>, RefObject<SVGPathElement | null>];
     strokeWidth?: number;
+    strokeColor?: string;
     className?: string;
   }
 
@@ -24,5 +25,24 @@ declare global {
     href?: never;
     target?: never;
     onClick?: () => void;
+  }
+
+  interface WorkCardProps {
+    title?: string;
+    subtitle?: string;
+    logo?: string;
+    service?: string;
+    carousel?: {
+      images: string[];
+      videos: string[];
+    };
+    imageHeight: number;
+    className?: string;
+  }
+
+  interface CTAButtonProps {
+    href: string;
+    text: string;
+    className?: string;
   }
 }

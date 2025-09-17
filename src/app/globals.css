@@ -50,3 +50,36 @@ body {
 .p-container {
   @apply px-[20px] tablet:px-9 py-[20px] desktop:py-9;
 }
+
+.max-w-container {
+  @apply max-w-[1580px];
+}
+
+.custom-grid {
+  @apply grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9;
+}
+
+.hero-sub-heading {
+  @apply font-[DrukWide] text-2xl tablet:text-4xl desktop:text-5xl;
+}
+
+.section-sub-heading {
+  @apply text-4xl tablet:text-6xl lg:text-8xl font-[DrukWide];
+}
+
+.section-quote {
+  @apply text-xs tablet:text-lg desktop:text-xl;
+}
+
+button,
+a {
+  @apply cursor-pointer;
+}
+
+h1,
+h2,
+h3,
+p,
+span {
+  @apply leading-[100%];
+}

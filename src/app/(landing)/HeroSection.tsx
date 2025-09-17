@@ -61,6 +61,7 @@ const HeroSection = () => {
         },
         onComplete: () => {
           document.querySelector(".sub-sections")?.classList.remove("hidden");
+          document.querySelector(".sub-sections")?.classList.add("flex");
         },
       });
 
@@ -117,8 +118,9 @@ const HeroSection = () => {
   return (
     <section className="h-[100svh] flex flex-col invisible" ref={heroRef}>
       {/* Container */}
-      <div className="max-w-[1580px] relative h-full p-container w-full mx-auto">
-        <div className="grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 gap-y-8 h-full">
+      <div className="max-w-container relative h-full p-container w-full mx-auto">
+        <div className="custom-grid gap-y-8 h-full">
+          {/* Header */}
           <header className="relative text-xs tablet:text-base col-span-full z-20">
             <div
               className="flex flex-col desktop:flex-row gap-y-4 gap-x-11"
@@ -140,7 +142,7 @@ const HeroSection = () => {
 
           <h2
             ref={addToSlideupTextRefs}
-            className="font-[DrukWide] text-2xl tablet:text-4xl desktop:text-5xl col-span-full tablet:col-start-4 desktop:col-start-7 z-10 tablet:-translate-y-20 desktop:-translate-y-0"
+            className="hero-sub-heading col-span-full tablet:col-start-4 desktop:col-start-7 z-10 tablet:-translate-y-20 desktop:-translate-y-0"
             data-lag="0.15"
           >
             “Turning brand <br />
