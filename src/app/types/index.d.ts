@@ -32,10 +32,6 @@ declare global {
     subtitle?: string;
     logo?: string;
     service?: string;
-    carousel?: {
-      images: string[];
-      videos: string[];
-    };
     imageHeight: number;
     className?: string;
   }

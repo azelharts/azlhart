@@ -13,28 +13,16 @@ const featuredWorks = [
     subtitle: "Creative Story Telling Agency",
     logo: "/images/feetstudio logo - white.svg",
     service: "development",
-    carousel: {
-      images: [""],
-      videos: ["/Ocean Wave.mp4"],
-    },
   },
   {
     title: "Aetheria",
     subtitle: "Start Your Journey & Discover Peace",
     service: "desgin & development",
-    carousel: {
-      images: [""],
-      videos: [""],
-    },
   },
   {
     title: "C&A",
     subtitle: "Kupang MSMEs Center  ",
     service: "desgin & development",
-    carousel: {
-      images: [""],
-      videos: [""],
-    },
   },
 ];
 
@@ -47,10 +35,10 @@ const WorkSection = () => {
           {/* Header */}
           <div className="max-w-container flex flex-col desktop:flex-row desktop:justify-between desktop:items-end font-[DrukWide] col-span-full gap-y-8">
             <h2 className="section-sub-heading self-start desktop:self-auto desktop:max-w-[75%]">
-              Brands we've worked with.
+              Brands we&apos;ve worked with.
             </h2>
             <blockquote className="section-quote self-end desktop:self-auto">
-              "FEATURED WORK"
+              &quote;FEATURED WORK&quote;
             </blockquote>
           </div>
 
@@ -63,7 +51,6 @@ const WorkSection = () => {
                 subtitle={work.subtitle}
                 logo={work.logo}
                 service={work.service}
-                carousel={work.carousel}
                 imageHeight={600}
               />
             ))}
@@ -81,7 +68,7 @@ const WorkSection = () => {
           />
 
           <span className="section-sub-heading col-end-5 tablet:col-start-6 tablet:col-end-auto  justify-self-end desktop:hidden">
-            "3"
+            &quote;3&quote;
           </span>
 
           {/* Work Cards - Desktop */}
@@ -110,7 +97,7 @@ const WorkSection = () => {
             />
 
             <span className="section-sub-heading col-end-5 tablet:col-start-6 tablet:col-end-auto  desktop:col-start-10 justify-self-end desktop:justify-self-start mt-24">
-              "3"
+              &quote;3&quote;
             </span>
           </div>
         </div>

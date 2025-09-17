@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import Image from "next/image";
-import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
@@ -36,7 +35,6 @@ interface WorkCardProps extends VariantProps<typeof workCardVariants> {
   subtitle?: string;
   logo?: string;
   service?: string;
-  carousel?: any;
   imageHeight: number;
   className?: string;
 }
@@ -46,7 +44,6 @@ const WorkCard = ({
   subtitle = "Creative Story Telling Agency",
   logo = "",
   service = "design & development",
-  carousel,
   variant = "default",
   imageHeight,
   className = "",
@@ -74,10 +71,10 @@ const WorkCard = ({
           className="w-full h-full object-cover mix-blend-exclusion"
         >
           <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
-          "Your browser does not support the video tag"
+          &quote;Your browser does not support the video tag&quote;
         </video>
         <Image
-          src="/images/feetstudio logo - white.png"
+          src={logo.length > 1 ? logo : "/images/feetstudio logo - white.png"}
           width={321}
           height={210}
           alt=""
