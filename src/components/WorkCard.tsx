@@ -61,7 +61,7 @@ const WorkCard = ({
     <div className={cn(workCardVariants({ variant }), className)} ref={cardRef}>
       {/* Image/Video */}
       <div
-        className="w-full desktop:h-auto relative rounded-[4px] overflow-hidden"
+        className="w-full desktop:h-auto max-h-[500px] tablet:max-h-[600px] desktop:max-h-none relative rounded-[4px] overflow-hidden"
         style={{ height: imageHeight }}
       >
         {videoSrc && (
@@ -100,19 +100,6 @@ const WorkCard = ({
             loading="lazy"
           />
         )}
-        <div
-          className="absolute-center-x bottom-4 tablet:bottom-8 flex gap-x-1 w-[95%]"
-          ref={slideIndicatorRef}
-        >
-          <div className="relative w-full h-1">
-            <div className="rounded-full bg-white/15 w-full h-full" />
-            <div className="rounded-full bg-white absolute top-0 left-0 w-[45%] h-full" />
-          </div>
-          <div className="relative w-full h-1">
-            <div className="rounded-full bg-white/15 w-full h-full" />
-            <div className="rounded-full bg-white absolute top-0 left-0 w-[0%] h-full" />
-          </div>
-        </div>
       </div>
 
       {/* Description - Hidden in imageOnly variant */}
