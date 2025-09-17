@@ -69,10 +69,10 @@ const WorkCard = ({
             width="320"
             height="240"
             preload="none"
+            autoPlay
             loop
             muted
             playsInline
-            autoPlay
             className="w-full h-full object-cover mix-blend-exclusion"
           >
             <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
@@ -82,11 +82,11 @@ const WorkCard = ({
 
         {imageSrc && (
           <Image
-            width={800}
-            height={800}
+            fill
             alt={`${title} image`}
             src={imageSrc}
             className="w-full h-full object-cover mix-blend-exclusion"
+            loading="lazy"
           />
         )}
 
@@ -97,6 +97,7 @@ const WorkCard = ({
             height={210}
             alt=""
             className="absolute-center"
+            loading="lazy"
           />
         )}
         <div

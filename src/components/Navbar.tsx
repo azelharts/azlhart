@@ -22,8 +22,6 @@ const Navbar = () => {
   const { contextSafe } = useGSAP(() => {
     gsap.registerPlugin(DrawSVGPlugin, CustomEase);
 
-    gsap.from(navRef.current, { autoAlpha: 0 });
-
     gsap.from([logoPathRef.current, "#logo-link"], {
       scrollTrigger: {
         trigger: "#hero-header",
@@ -58,6 +56,7 @@ const Navbar = () => {
     <nav
       className="fixed max-w-container top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 custom-grid w-full z-50 invisible mix-blend-difference text-white"
       ref={navRef}
+      id="navbar"
     >
       {/* Logo */}
 

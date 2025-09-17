@@ -66,6 +66,7 @@ const HeroSection = () => {
       });
 
       tl.from(heroRef.current, { autoAlpha: 0 })
+        .from("#navbar", { autoAlpha: 0 })
         .from(logoPathRef.current, {
           drawSVG: 0,
           duration: 3.75,
