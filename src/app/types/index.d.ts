@@ -33,6 +33,8 @@ declare global {
     logo?: string;
     service?: string;
     imageHeight: number;
+    videoSrc?: string | undefined;
+    imageSrc?: string | undefined;
     className?: string;
   }
 

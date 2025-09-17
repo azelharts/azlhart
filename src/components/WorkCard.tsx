@@ -36,16 +36,20 @@ interface WorkCardProps extends VariantProps<typeof workCardVariants> {
   logo?: string;
   service?: string;
   imageHeight: number;
+  videoSrc?: string | undefined;
+  imageSrc?: string | undefined;
   className?: string;
 }
 
 const WorkCard = ({
   title = "FeetStudio",
   subtitle = "Creative Story Telling Agency",
-  logo = "",
+  logo,
   service = "design & development",
   variant = "default",
   imageHeight,
+  videoSrc,
+  imageSrc,
   className = "",
 }: WorkCardProps) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -60,26 +64,41 @@ const WorkCard = ({
         className="w-full desktop:h-auto relative rounded-[4px] overflow-hidden"
         style={{ height: imageHeight }}
       >
-        <video
-          width="320"
-          height="240"
-          preload="none"
-          loop
-          muted
-          playsInline
-          autoPlay
-          className="w-full h-full object-cover mix-blend-exclusion"
-        >
-          <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
-          &quot;Your browser does not support the video tag&quot;
-        </video>
-        <Image
-          src={logo.length > 1 ? logo : "/images/feetstudio logo - white.png"}
-          width={321}
-          height={210}
-          alt=""
-          className="absolute-center"
-        />
+        {videoSrc && (
+          <video
+            width="320"
+            height="240"
+            preload="none"
+            loop
+            muted
+            playsInline
+            autoPlay
+            className="w-full h-full object-cover mix-blend-exclusion"
+          >
+            <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
+            &quot;Your browser does not support the video tag&quot;
+          </video>
+        )}
+
+        {imageSrc && (
+          <Image
+            width={800}
+            height={800}
+            alt={`${title} image`}
+            src={imageSrc}
+            className="w-full h-full object-cover mix-blend-exclusion"
+          />
+        )}
+
+        {logo && (
+          <Image
+            src={logo}
+            width={321}
+            height={210}
+            alt=""
+            className="absolute-center"
+          />
+        )}
         <div
           className="absolute-center-x bottom-4 tablet:bottom-8 flex gap-x-1 w-[95%]"
           ref={slideIndicatorRef}

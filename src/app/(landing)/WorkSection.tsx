@@ -8,6 +8,7 @@ const featuredWorks = [
   {
     title: "FeetStudio",
     subtitle: "Creative Story Telling Agency",
+    videoSrc: "/videos/Ocean Wave.mp4",
     logo: "/images/feetstudio logo - white.png",
     service: "development",
   },
@@ -15,11 +16,13 @@ const featuredWorks = [
     title: "Aetheria",
     subtitle: "Start Your Journey & Discover Peace",
     service: "desgin & development",
+    imageSrc: "/images/aetheria.png",
   },
   {
     title: "C&A",
     subtitle: "Kupang MSMEs Center  ",
     service: "desgin & development",
+    imageSrc: "/images/C&A.png",
   },
 ];
 
@@ -48,6 +51,8 @@ const WorkSection = () => {
                 subtitle={work.subtitle}
                 logo={work.logo}
                 service={work.service}
+                videoSrc={work.videoSrc}
+                imageSrc={work.imageSrc}
                 imageHeight={600}
               />
             ))}
@@ -70,17 +75,27 @@ const WorkSection = () => {
 
           {/* Work Cards - Desktop */}
           <div className="hidden desktop:grid grid-cols-12 auto-rows-max gap-x-9 gap-y-16 col-span-full mt-24">
-            <WorkCard className="col-span-9" imageHeight={690} />
+            <WorkCard
+              videoSrc="/videos/Ocean Wave.mp4"
+              logo="/images/feetstudio logo - white.png"
+              className="col-span-9"
+              imageHeight={690}
+            />
             <WorkCard
               variant="imageOnly"
+              imageSrc="/images/Social Preview.png"
               className="col-span-3"
               imageHeight={690}
             />
 
-            <WorkCard className="col-span-4" imageHeight={840} />
+            <WorkCard
+              imageSrc="/images/aetheria.png"
+              className="col-span-4"
+              imageHeight={840}
+            />
 
             <div className="col-span-8 flex flex-col justify-between">
-              <WorkCard imageHeight={545} />
+              <WorkCard imageSrc="/images/C&A.png" imageHeight={545} />
               <h3 className="section-sub-heading col-span-full text-end">
                 SEE MORE <br />
                 TABS
