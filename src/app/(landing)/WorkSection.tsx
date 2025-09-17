@@ -1,9 +1,6 @@
 "use client";
 import { useRef } from "react";
 
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import Image from "next/image";
 import WorkCard from "@/components/WorkCard";
 import CTAButton from "@/components/CTAButton";
 
@@ -11,7 +8,7 @@ const featuredWorks = [
   {
     title: "FeetStudio",
     subtitle: "Creative Story Telling Agency",
-    logo: "/images/feetstudio logo - white.svg",
+    logo: "/images/feetstudio logo - white.png",
     service: "development",
   },
   {
@@ -38,7 +35,7 @@ const WorkSection = () => {
               Brands we&apos;ve worked with.
             </h2>
             <blockquote className="section-quote self-end desktop:self-auto">
-              &quote;FEATURED WORK&quote;
+              &quot;FEATURED WORK&quot;
             </blockquote>
           </div>
 
@@ -68,7 +65,7 @@ const WorkSection = () => {
           />
 
           <span className="section-sub-heading col-end-5 tablet:col-start-6 tablet:col-end-auto  justify-self-end desktop:hidden">
-            &quote;3&quote;
+            &quot;3&quot;
           </span>
 
           {/* Work Cards - Desktop */}
@@ -97,7 +94,7 @@ const WorkSection = () => {
             />
 
             <span className="section-sub-heading col-end-5 tablet:col-start-6 tablet:col-end-auto  desktop:col-start-10 justify-self-end desktop:justify-self-start mt-24">
-              &quote;3&quote;
+              &quot;3&quot;
             </span>
           </div>
         </div>

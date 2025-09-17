@@ -71,7 +71,7 @@ const WorkCard = ({
           className="w-full h-full object-cover mix-blend-exclusion"
         >
           <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
-          &quote;Your browser does not support the video tag&quote;
+          &quot;Your browser does not support the video tag&quot;
         </video>
         <Image
           src={logo.length > 1 ? logo : "/images/feetstudio logo - white.png"}
