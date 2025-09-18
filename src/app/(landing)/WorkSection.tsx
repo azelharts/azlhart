@@ -22,12 +22,16 @@ const WorkSection = () => {
 
           {/* Work Cards */}
           <WorkCard
+            href="https://feetstudios.com"
             videoSrc="/videos/ocean wave.mp4"
+            title="FeetStudio"
+            subtitle="Creative Story Telling Agency"
             logo="/images/feetstudio logo - white.png"
             className="col-span-full desktop:col-span-9"
             imageHeight={690}
           />
           <WorkCard
+            href="https://feetstudios.com"
             variant="imageOnly"
             imageSrc="/images/compressed/Social Preview.png"
             className="hidden desktop:block desktop:col-span-3"
@@ -35,13 +39,22 @@ const WorkSection = () => {
           />
 
           <WorkCard
+            href="https://aetheria-delta.vercel.app/"
+            title="Aetheria"
+            subtitle="Start Your Journey & Discover Peace"
             imageSrc="/images/compressed/aetheria.png"
             className="col-span-full desktop:col-span-4"
             imageHeight={840}
           />
 
           <div className="col-span-full desktop:col-span-8 flex flex-col gap-y-16 desktop:gap-y-0 justify-between">
-            <WorkCard imageSrc="/images/compressed/C&A.png" imageHeight={545} />
+            <WorkCard
+              href="#"
+              imageSrc="/images/compressed/C&A.png"
+              title="C&A"
+              subtitle="Kupang MSME Center"
+              imageHeight={545}
+            />
             <h3 className="section-sub-heading col-span-full text-end">
               SEE MORE <br />
               TABS

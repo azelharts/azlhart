@@ -35,6 +35,7 @@ declare global {
     imageHeight: number;
     videoSrc?: string | undefined;
     imageSrc?: string | undefined;
+    href: string;
     className?: string;
   }
 

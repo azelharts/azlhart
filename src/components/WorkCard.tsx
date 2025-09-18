@@ -9,6 +9,7 @@ import { useGSAP } from "@gsap/react";
 
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const workCardVariants = cva("flex flex-col", {
   variants: {
@@ -43,6 +44,7 @@ interface WorkCardProps extends VariantProps<typeof workCardVariants> {
   videoSrc?: string | undefined;
   imageSrc?: string | undefined;
   className?: string;
+  href: string;
 }
 
 const WorkCard = ({
@@ -55,14 +57,19 @@ const WorkCard = ({
   videoSrc,
   imageSrc,
   className = "",
+  href,
 }: WorkCardProps) => {
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef = useRef<HTMLAnchorElement>(null);
   const slideIndicatorRef = useRef<HTMLDivElement>(null);
 
   useGSAP(() => {}, { scope: cardRef });
 
   return (
-    <div className={cn(workCardVariants({ variant }), className)} ref={cardRef}>
+    <Link
+      href={href}
+      className={cn(workCardVariants({ variant }), className)}
+      ref={cardRef}
+    >
       {/* Image/Video */}
       <div
         className="w-full desktop:h-auto max-h-[500px] tablet:max-h-[600px] desktop:max-h-none relative rounded-[4px] overflow-hidden"
@@ -115,7 +122,7 @@ const WorkCard = ({
           {subtitle}
         </p>
       </div>
-    </div>
+    </Link>
   );
 };
 
