@@ -60,8 +60,12 @@ const HeroSection = () => {
           ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
         },
         onComplete: () => {
-          document.querySelector(".sub-sections")?.classList.remove("hidden");
-          document.querySelector(".sub-sections")?.classList.add("flex");
+          document
+            .querySelectorAll(".sub-sections")
+            .forEach((el) => el.classList.remove("hidden"));
+          document
+            .querySelectorAll(".sub-sections")
+            .forEach((el) => el.classList.add("flex"));
         },
       });
 

@@ -1,12 +1,14 @@
 import HeroSection from "./HeroSection";
+import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 
 const Home = () => {
   return (
-    <main className="flex flex-col gap-y-40 desktop:gap-y-44">
+    <main className="flex flex-col gap-y-40 tablet:gap-y-52 desktop:gap-y-72">
       <HeroSection />
       <WorkSection />
-      <section className="h-[100vh] w-full hidden sub-sections"></section>
+      <ServiceSection />
+      <section className="h-[100vh] w-full hidden flex-col"></section>
     </main>
   );
 };

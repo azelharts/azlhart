@@ -1,8 +1,12 @@
 "use client";
 
 import { useRef } from "react";
+
 import Image from "next/image";
+
+import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
+
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -73,7 +77,7 @@ const WorkCard = ({
             loop
             muted
             playsInline
-            className="w-full h-full object-cover mix-blend-exclusion"
+            className="w-full h-full object-cover"
           >
             <source src="/videos/Ocean Wave.mp4" type="video/mp4" />
             &quot;Your browser does not support the video tag&quot;
@@ -83,10 +87,10 @@ const WorkCard = ({
         {imageSrc && (
           <Image
             fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             alt={`${title} image`}
             src={imageSrc}
-            className="w-full h-full object-cover mix-blend-exclusion"
-            loading="lazy"
+            className="w-full h-full object-cover"
           />
         )}
 
@@ -97,7 +101,6 @@ const WorkCard = ({
             height={210}
             alt=""
             className="absolute-center"
-            loading="lazy"
           />
         )}
       </div>

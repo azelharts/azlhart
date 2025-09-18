@@ -42,7 +42,7 @@ export default function RootLayout({
       <body className="font-[BricolageGrotesque] antialiased relative">
         <Navbar />
         <div id="smooth-wrapper">
-          <div id="smooth-content" className="mix-blend-multiply">
+          <div id="smooth-content" className="will-change-transform">
             {children}
           </div>
         </div>
