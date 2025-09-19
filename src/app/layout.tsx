@@ -25,7 +25,7 @@ export default function RootLayout({
   useGSAP(
     () => {
       ScrollSmoother.create({
-        smooth: 1,
+        smooth: 1.5,
         smoothTouch: 0.25,
         effects: true,
         normalizeScroll: true,

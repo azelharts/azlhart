@@ -16,7 +16,7 @@ const services = [
   },
   {
     type: "develop",
-    services: ["Website", "Web App", "API", "CMS"],
+    services: ["Website", "WebApp", "API", "CMS"],
     icon: ArrowUpRight,
   },
   {
@@ -38,9 +38,9 @@ const ServiceSection = () => {
               Brand <br className="desktop:hidden" />
               Forward
             </h2>
-            <blockquote className="section-quote self-end desktop:self-auto">
+            <span className="section-quote self-end desktop:self-auto">
               &quot;CREATIVE SYSTEM&quot;
-            </blockquote>
+            </span>
           </div>
 
           {/* Service Cards */}

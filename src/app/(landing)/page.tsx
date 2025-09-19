@@ -1,6 +1,7 @@
 import HeroSection from "./HeroSection";
 import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
+import AboutSection from "./AboutSection";
 
 const Home = () => {
   return (
@@ -8,6 +9,7 @@ const Home = () => {
       <HeroSection />
       <WorkSection />
       <ServiceSection />
+      <AboutSection />
       <section className="h-[100vh] w-full hidden flex-col"></section>
     </main>
   );

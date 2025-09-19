@@ -15,9 +15,9 @@ const WorkSection = () => {
             <h2 className="section-sub-heading self-start desktop:self-auto desktop:max-w-[75%]">
               Brands we&apos;ve worked with.
             </h2>
-            <blockquote className="section-quote self-end desktop:self-auto">
+            <span className="section-quote self-end desktop:self-auto">
               &quot;FEATURED WORK&quot;
-            </blockquote>
+            </span>
           </div>
 
           {/* Work Cards */}

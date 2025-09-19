@@ -85,7 +85,7 @@ const ServiceCard = ({ type, services, icon: Icon }: ServiceCardProps) => {
         {services.map((service) => (
           <span
             key={service}
-            className="text-sm tablet:text-base desktop:text-lg flex items-center justify-center px-2 py-1 rounded-sm bg-[#ECECEC]"
+            className="text-sm tablet:text-base desktop:text-lg flex items-center justify-center px-2 py-1 rounded-[4px] bg-[#ECECEC]"
           >
             &quot;{service.toUpperCase()}&quot;
           </span>
