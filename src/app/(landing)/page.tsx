@@ -2,6 +2,7 @@ import HeroSection from "./HeroSection";
 import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 import AboutSection from "./AboutSection";
+import TestimonialSection from "./TestimonialSection";
 
 const Home = () => {
   return (
@@ -10,7 +11,8 @@ const Home = () => {
       <WorkSection />
       <ServiceSection />
       <AboutSection />
-      <section className="h-[100vh] w-full hidden flex-col"></section>
+      <TestimonialSection />
+      <div className="w-full h-screen hidden sub-sections" />
     </main>
   );
 };

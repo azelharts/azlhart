@@ -14,6 +14,7 @@ import { getInitialDimensions } from "@/lib/utils";
 
 import LogoSVG from "@/components/LogoSVG";
 import ScrambleText from "@/components/ScrambleText";
+import ScrollTrigger from "gsap/dist/ScrollTrigger";
 
 const HeroSection = () => {
   const heroRef = useRef<HTMLElement>(null);
@@ -28,7 +29,7 @@ const HeroSection = () => {
   };
 
   useGSAP(() => {
-    gsap.registerPlugin(DrawSVGPlugin, SplitText);
+    gsap.registerPlugin(DrawSVGPlugin, SplitText, ScrollTrigger);
 
     document.fonts.ready.then(() => {
       const {
@@ -60,12 +61,19 @@ const HeroSection = () => {
           ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
         },
         onComplete: () => {
-          document
-            .querySelectorAll(".sub-sections")
-            .forEach((el) => el.classList.remove("hidden"));
-          document
-            .querySelectorAll(".sub-sections")
-            .forEach((el) => el.classList.add("flex"));
+          document.querySelectorAll(".sub-sections").forEach((el) => {
+            el.classList.remove("hidden");
+            el.classList.add("flex");
+          });
+
+          ScrollTrigger.create({
+            trigger: "#sticktop",
+            pin: true,
+            start: "top top",
+            end: "bottom bottom",
+            endTrigger: "#end-trigger",
+            toggleActions: "play pause reverse pause",
+          });
         },
       });
 

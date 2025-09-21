@@ -2,8 +2,6 @@
 
 import "./globals.css";
 
-import { useEffect } from "react";
-
 import { usePathname } from "next/navigation";
 
 import gsap from "gsap";
@@ -12,8 +10,6 @@ import ScrollTrigger from "gsap/dist/ScrollTrigger";
 import ScrollSmoother from "gsap/dist/ScrollSmoother";
 
 import Navbar from "@/components/Navbar";
-
-import Lenis from "lenis";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger, ScrollSmoother);
@@ -28,24 +24,15 @@ export default function RootLayout({
 
   useGSAP(
     () => {
-      // ScrollSmoother.create({
-      //   smooth: 1.5,
-      //   smoothTouch: 0.25,
-      //   effects: true,
-      //   normalizeScroll: true,
-      // });
+      ScrollSmoother.create({
+        smooth: 1.5,
+        smoothTouch: 0.25,
+        effects: true,
+        normalizeScroll: true,
+      });
     },
     { dependencies: [pathname], revertOnUpdate: true }
   );
-
-  useEffect(() => {
-    const lenis = new Lenis();
-    function raf(time: any) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-    requestAnimationFrame(raf);
-  }, []);
 
   return (
     <html lang="en">
