@@ -79,7 +79,7 @@ const TestimonialSection = () => {
             className="h-[100vh] w-full flex flex-col items-center justify-center relative"
             id="sticktop"
           >
-            <div className="flex">
+            <div className="flex gap-x-8">
               <h2 className="font-[DrukWide] text-6xl tablet:text-7xl desktop:text-8xl text-nowrap">
                 TESTIMONIAL REVIEW
               </h2>
@@ -87,7 +87,7 @@ const TestimonialSection = () => {
                 TESTIMONIAL REVIEW
               </h2>
             </div>
-            <div className="flex">
+            <div className="flex gap-x-8">
               <h2 className="font-[DrukWide] text-6xl tablet:text-7xl desktop:text-8xl text-white text-nowrap text-stroke">
                 TESTIMONIAL REVIEW
               </h2>
@@ -106,7 +106,10 @@ const TestimonialSection = () => {
           </div>
 
           {/* Testmonial Cards */}
-          <div className="custom-grid gap-y-32" id="end-trigger">
+          <div
+            className="custom-grid gap-y-16 tablet:gap-y-24 desktop:gap-y-32 pb-[100vh]"
+            id="end-trigger"
+          >
             {testimonials.map((testimonial, idx) => (
               <TestimonialCard
                 key={idx}
