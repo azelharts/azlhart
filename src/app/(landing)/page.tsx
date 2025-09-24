@@ -3,6 +3,8 @@ import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 import AboutSection from "./AboutSection";
 import TestimonialSection from "./TestimonialSection";
+import BookingFlowSection from "./BookingFlowSection";
+import Footer from "@/components/Footer";
 
 const Home = () => {
   return (
@@ -12,7 +14,7 @@ const Home = () => {
       <ServiceSection />
       <AboutSection />
       <TestimonialSection />
-      <div className="w-full h-screen hidden sub-sections" />
+      <BookingFlowSection />
     </main>
   );
 };

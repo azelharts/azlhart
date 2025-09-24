@@ -140,11 +140,11 @@ const HeroSection = () => {
               id="hero-header"
             >
               <p className="fade-up">Studio of Mario Daruranto</p>
-              <div className="flex flex-col gap-y-1 fade-up">
+              <div className="flex flex-col gap-y-2 fade-up">
                 <span>Designer</span>
                 <span>Developer</span>
               </div>
-              <div className="flex flex-col gap-y-1 fade-up">
+              <div className="flex flex-col gap-y-2 fade-up">
                 <p>Kupang, East Nusa Tenggara</p>
                 <Link href="mailto:hello@azlhart.com">
                   <ScrambleText text="hello@azlhart.com"></ScrambleText>
