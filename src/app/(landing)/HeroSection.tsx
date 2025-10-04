@@ -91,9 +91,11 @@ const HeroSection = () => {
         .from(
           heroVideoRef.current,
           {
-            duration: 0.5,
+            duration: 1.5,
             opacity: 0,
-            ease: "power3.in",
+            onStart: () => {
+              heroVideoRef.current?.play();
+            },
           },
           "<",
         )
@@ -162,7 +164,7 @@ const HeroSection = () => {
 
           <h2
             ref={addToSlideupTextRefs}
-            className={`hero-sub-heading tablet:col-start-4 desktop:col-start-7 tablet:-translate-y-20 desktop:-translate-y-0 z-10 col-span-full ${drukWide.className}`}
+            className={`hero-sub-heading tablet:col-start-4 desktop:col-start-7 tablet:-translate-y-20 desktop:-translate-y-0 tablet:col-span-5 z-10 col-span-4 ${drukWide.className}`}
           >
             “Turning brand <br />
             into tab everyone <br />
@@ -192,13 +194,13 @@ const HeroSection = () => {
 
       <video
         ref={heroVideoRef}
+        poster="/images/hero-thumbnail.png"
         className="absolute-center h-full w-full object-cover brightness-50"
-        autoPlay
         loop
         muted
         playsInline
       >
-        <source src="/videos/hero.mp4" type="video/mp4" />
+        <source src="/videos/hero-compressed.mp4" type="video/mp4" />
         Your browser does not support the video tag.
       </video>
     </section>

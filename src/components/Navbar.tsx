@@ -81,7 +81,7 @@ const Navbar = () => {
       </div>
 
       {/* Nav Links */}
-      <div className="tablet:flex desktop:col-start-10 desktop:col-end-auto col-span-3 col-end-8 hidden justify-end gap-x-11 self-start">
+      <div className="tablet:flex desktop:col-start-7 desktop:col-end-auto desktop:justify-self-start col-span-3 col-end-8 hidden justify-end gap-x-11 self-start">
         <div className="fade-up-2 flex items-center gap-x-6">
           <span>01</span>
           <Link href="/about">
