@@ -1,10 +1,16 @@
+import { cn } from "@/lib/utils";
 import ScrambleText from "./ScrambleText";
 
 import { ArrowRight } from "lucide-react";
 
-const CTA = () => {
+interface CTAProps {
+  text: string;
+  className?: string;
+}
+
+const CTA = ({ text, className }: CTAProps) => {
   return (
-    <div className="flex items-center justify-end gap-x-2">
+    <div className={cn("flex items-center justify-end gap-x-2", className)}>
       <ArrowRight
         width={14}
         height={14}
@@ -12,7 +18,7 @@ const CTA = () => {
         className="icon-responsive"
       />
       <button>
-        <ScrambleText text="let's talk" />
+        <ScrambleText text={text} />
       </button>
     </div>
   );

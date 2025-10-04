@@ -45,7 +45,7 @@ const ScrambleText = ({ text }: { text: string }) => {
       onMouseEnter={hoverIn}
       onMouseLeave={hoverOut}
       ref={textRef}
-      className="p-responsive font-bold text-nowrap"
+      className="font-bold text-nowrap"
     >
       {text}
     </span>

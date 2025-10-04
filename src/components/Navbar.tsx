@@ -77,7 +77,7 @@ const Navbar = () => {
 
       {/* CTA */}
       <div className="fade-up-2 tablet:col-end-13 tablet:order-last col-end-4 -translate-0.5 self-start">
-        <CTA />
+        <CTA text="let's talk" className="p-responsive" />
       </div>
 
       {/* Nav Links */}
@@ -96,8 +96,8 @@ const Navbar = () => {
         </div>
         <div className="fade-up-2 flex items-center gap-x-6">
           <span>03</span>
-          <Link href="/contact">
-            <ScrambleText text="contact" />
+          <Link href="/archive">
+            <ScrambleText text="archive" />
           </Link>
         </div>
       </div>

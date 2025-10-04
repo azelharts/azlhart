@@ -1,9 +1,11 @@
 import HeroSection from "./HeroSection";
+import AboutSection from "./AboutSection";
 
 const Home = () => {
   return (
-    <main className="tablet:gap-y-52 desktop:gap-y-72 flex flex-col gap-y-40">
+    <main className="flex flex-col gap-y-20">
       <HeroSection />
+      <AboutSection />
       <section className="h-screen w-full" />
     </main>
   );
