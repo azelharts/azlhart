@@ -5,13 +5,15 @@ import { useRef } from "react";
 import Link from "next/link";
 
 import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
 import DrawSVGPlugin from "gsap/dist/DrawSVGPlugin";
 import CustomEase from "gsap/dist/CustomEase";
+import { useGSAP } from "@gsap/react";
 
 import LogoSVG from "./LogoSVG";
 
 import { ArrowRight } from "lucide-react";
+
+import CTA from "./CTA";
 import ScrambleText from "./ScrambleText";
 
 const Navbar = () => {
@@ -54,12 +56,11 @@ const Navbar = () => {
 
   return (
     <nav
-      className="fixed max-w-container top-[20px] desktop:top-9 px-[20px] tablet:px-9 left-1/2 -translate-x-1/2 custom-grid w-full z-50 invisible mix-blend-difference text-white"
+      className="max-w-container desktop:top-9 tablet:px-9 custom-grid p-responsive invisible fixed top-[20px] left-1/2 z-50 w-full -translate-x-1/2 px-[20px] mix-blend-difference"
       ref={navRef}
       id="navbar"
     >
       {/* Logo */}
-
       <Link
         href="/"
         onMouseEnter={handleLogoMouseEnter}
@@ -69,51 +70,43 @@ const Navbar = () => {
       >
         <LogoSVG
           refs={[logoRef, logoPathRef]}
-          strokeWidth={8}
           strokeColor="#FFFFFF"
-          className="col-start-1 max-h-[32px] tablet:max-h-[48px] desktop:max-h-[64px]"
+          className="tablet:max-h-[48px] desktop:max-h-[64px] col-start-1 max-h-[32px]"
         />
       </Link>
 
       {/* CTA */}
-      <div className="flex items-start justify-end self-start gap-x-2 cursor-pointer col-span-2 col-end-4 text-xs tablet:hidden fade-up-2">
-        <ArrowRight width={18} height={18} strokeWidth={1} />
-        <button>
-          <ScrambleText text="let's talk" />
-        </button>
+      <div className="fade-up-2 tablet:col-end-13 tablet:order-last col-end-4 -translate-0.5 self-start">
+        <CTA />
       </div>
 
       {/* Nav Links */}
-      <div className="hidden tablet:flex justify-end self-start gap-x-11 col-span-3 col-end-8 desktop:col-start-9 desktop:col-end-auto">
-        <div className="flex items-center gap-x-6 fade-up-2">
+      <div className="tablet:flex desktop:col-start-10 desktop:col-end-auto col-span-3 col-end-8 hidden justify-end gap-x-11 self-start">
+        <div className="fade-up-2 flex items-center gap-x-6">
           <span>01</span>
-          <Link href="/work">
-            <ScrambleText text="work" />
+          <Link href="/about">
+            <ScrambleText text="studio" />
           </Link>
         </div>
-        <div className="flex items-center gap-x-6 fade-up-2">
+        <div className="fade-up-2 flex items-center gap-x-6">
           <span>02</span>
-          <Link href="/about">
-            <ScrambleText text="about" />
+          <Link href="/works">
+            <ScrambleText text="works" />
+          </Link>
+        </div>
+        <div className="fade-up-2 flex items-center gap-x-6">
+          <span>03</span>
+          <Link href="/contact">
+            <ScrambleText text="contact" />
           </Link>
         </div>
       </div>
 
       {/* Menu */}
-      <div className="flex flex-col items-end gap-y-[6px] self-start tablet:hidden col-end-5">
-        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
-        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
-        <div className="w-6 h-[2px] rounded-full bg-white fill-width" />
-      </div>
-
-      {/* CTA */}
-      <div className="hidden tablet:flex justify-end col-span-2 self-start col-end-13">
-        <div className="flex items-center gap-x-6 cursor-pointer fade-up-2">
-          <ArrowRight width={20} height={20} strokeWidth={1} />
-          <button>
-            <ScrambleText text="let's talk" />
-          </button>
-        </div>
+      <div className="tablet:hidden col-end-5 flex flex-col items-end gap-y-[6px] self-start">
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
       </div>
     </nav>
   );

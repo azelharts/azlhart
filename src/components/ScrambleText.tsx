@@ -13,7 +13,7 @@ const ScrambleText = ({ text }: { text: string }) => {
     () => {
       gsap.registerPlugin(ScrambleTextPlugin);
     },
-    { scope: textRef }
+    { scope: textRef },
   );
 
   const hoverIn = contextSafe(() => {
@@ -45,7 +45,7 @@ const ScrambleText = ({ text }: { text: string }) => {
       onMouseEnter={hoverIn}
       onMouseLeave={hoverOut}
       ref={textRef}
-      className="font-[BricolageGrotesqueBold]"
+      className="p-responsive font-bold text-nowrap"
     >
       {text}
     </span>

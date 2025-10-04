@@ -1,13 +1,6 @@
 import { RefObject } from "react";
 
 declare global {
-  interface LogoSVGProps {
-    refs: [RefObject<SVGSVGElement | null>, RefObject<SVGPathElement | null>];
-    strokeWidth?: number;
-    strokeColor?: string;
-    className?: string;
-  }
-
   interface BaseProps {
     className?: string;
     children: ReactNode;

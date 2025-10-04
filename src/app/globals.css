@@ -1,38 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #2c2c2c;
+  --background: #0a0a0a;
+  --foreground: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
 
   --breakpoint-tablet: 834px;
   --breakpoint-desktop: 1256px;
 }
 
-@layer base {
-  @font-face {
-    font-family: DrukWide;
-    src: url("/fonts/DrukWide-Medium-Trial.otf");
-  }
-
-  @font-face {
-    font-family: BricolageGrotesque;
-    src: url("/fonts/BricolageGrotesque-Light.ttf");
-  }
-
-  @font-face {
-    font-family: BricolageGrotesqueBold;
-    src: url("/fonts/BricolageGrotesque-Bold.ttf");
-  }
-}
-
 body {
   background: var(--background);
   color: var(--foreground);
+}
+
+button,
+a {
+  @apply cursor-pointer font-bold;
+}
+
+h1,
+h2,
+h3,
+a,
+p,
+span {
+  @apply leading-[100%];
 }
 
 .absolute-center {
@@ -47,42 +43,44 @@ body {
   @apply absolute top-1/2 -translate-y-1/2;
 }
 
-.p-container {
-  @apply px-[20px] tablet:px-9 py-[20px] desktop:py-9;
+.px-container {
+  @apply tablet:px-9 desktop:py-9 px-[20px] py-[20px];
 }
 
 .max-w-container {
-  @apply max-w-[1580px];
+  @apply max-w-[2560px];
 }
 
 .custom-grid {
-  @apply grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9;
+  @apply tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9 grid grid-cols-4;
 }
 
 .hero-sub-heading {
-  @apply font-[DrukWide] text-2xl tablet:text-4xl desktop:text-5xl;
+  @apply tablet:text-4xl desktop:text-5xl text-2xl;
 }
 
 .section-sub-heading {
-  @apply text-4xl tablet:text-6xl lg:text-8xl font-[DrukWide];
+  @apply tablet:text-6xl text-4xl lg:text-8xl;
 }
 
 .section-quote {
-  @apply text-xs tablet:text-lg desktop:text-xl;
+  @apply tablet:text-lg desktop:text-xl text-xs;
 }
 
-button,
-a {
-  @apply cursor-pointer;
+.h1-responsive {
+  @apply tablet:text-[9.5rem] desktop:text-[16rem] text-[4rem];
 }
 
-h1,
-h2,
-h3,
-a,
-p,
-span {
-  @apply leading-[100%];
+.h2-responsive {
+  @apply tablet:text-4xl desktop:text-5xl text-2xl;
+}
+
+.p-responsive {
+  @apply tablet:text-sm text-xs;
+}
+
+.icon-responsive {
+  @apply tablet:min-w-4 tablet:min-h-4 min-h-3.5 min-w-3.5;
 }
 
 .text-stroke {

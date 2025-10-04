@@ -10,7 +10,7 @@ import DrawSVGPlugin from "gsap/dist/DrawSVGPlugin";
 import SplitText from "gsap/dist/SplitText";
 import CustomEase from "gsap/dist/CustomEase";
 
-import { getInitialDimensions } from "@/lib/utils";
+import { drukWide, getInitialLogoDimensions } from "@/lib/utils";
 
 import LogoSVG from "@/components/LogoSVG";
 import ScrambleText from "@/components/ScrambleText";
@@ -19,6 +19,7 @@ import ScrollTrigger from "gsap/dist/ScrollTrigger";
 const HeroSection = () => {
   const heroRef = useRef<HTMLElement>(null);
   const logoRef = useRef<SVGSVGElement>(null);
+  const heroVideoRef = useRef<HTMLVideoElement>(null);
   const logoPathRef = useRef<SVGPathElement>(null);
   const slideUpTextRefs = useRef<HTMLElement[]>([]);
 
@@ -39,7 +40,7 @@ const HeroSection = () => {
         heightAfter,
         bottom,
         x,
-      } = getInitialDimensions();
+      } = getInitialLogoDimensions();
 
       const headingSplit = SplitText.create(slideUpTextRefs.current, {
         type: "lines",
@@ -61,11 +62,6 @@ const HeroSection = () => {
           ease: CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1"),
         },
         onComplete: () => {
-          document.querySelectorAll(".sub-sections").forEach((el) => {
-            el.classList.remove("hidden");
-            el.classList.add("flex");
-          });
-
           ScrollTrigger.create({
             trigger: "#sticktop",
             pin: true,
@@ -86,13 +82,21 @@ const HeroSection = () => {
         })
         .to(logoRef.current, {
           duration: 1.5,
-          fill: "FFF",
           width: widthAfter ? widthAfter : 650,
           height: heightAfter ? heightAfter : 350,
           translateX: x,
           yPercent: 0,
           bottom: bottom,
         })
+        .from(
+          heroVideoRef.current,
+          {
+            duration: 0.5,
+            opacity: 0,
+            ease: "power3.in",
+          },
+          "<",
+        )
         .from(
           ".fade-up",
           {
@@ -101,12 +105,8 @@ const HeroSection = () => {
             stagger: 0.075,
             ease: "power2.inOut",
           },
-          "-=1"
+          "-=1",
         )
-        .from(".fill-width", {
-          width: 0,
-          stagger: { amount: 0.075 },
-        })
         .from(
           ".fade-up-2",
           {
@@ -115,36 +115,43 @@ const HeroSection = () => {
             stagger: 0.075,
             ease: "power2.inOut",
           },
-          "-=1.5"
+          "-=0.75",
         )
+        .from(".fill-width", {
+          width: 0,
+          stagger: { amount: 0.075 },
+        })
         .from(
           headingSplit.lines,
           {
             y: "100%",
             stagger: 0.075,
           },
-          "-=1"
+          "-=1",
         );
     });
   }, {});
 
   return (
-    <section className="h-[100svh] flex flex-col invisible" ref={heroRef}>
+    <section
+      className="invisible relative flex h-[100svh] flex-col overflow-clip"
+      ref={heroRef}
+    >
       {/* Container */}
-      <div className="max-w-container relative h-full p-container w-full mx-auto">
-        <div className="custom-grid gap-y-8 h-full">
+      <div className="max-w-container px-container desktop:!pb-0 relative z-10 mx-auto h-full w-full">
+        <div className="custom-grid h-full gap-y-8">
           {/* Header */}
-          <header className="relative text-xs tablet:text-base col-span-full z-20">
+          <header className="p-responsive relative z-20 col-span-full">
             <div
-              className="flex flex-col desktop:flex-row gap-y-4 gap-x-11"
+              className="desktop:flex-row flex flex-col gap-x-11 gap-y-4"
               id="hero-header"
             >
               <p className="fade-up">Studio of Mario Daruranto</p>
-              <div className="flex flex-col gap-y-2 fade-up">
+              <div className="fade-up flex flex-col gap-y-2">
                 <span>Designer</span>
                 <span>Developer</span>
               </div>
-              <div className="flex flex-col gap-y-2 fade-up">
+              <div className="fade-up flex flex-col gap-y-2">
                 <p>Kupang, East Nusa Tenggara</p>
                 <Link href="mailto:hello@azlhart.com">
                   <ScrambleText text="hello@azlhart.com"></ScrambleText>
@@ -155,41 +162,45 @@ const HeroSection = () => {
 
           <h2
             ref={addToSlideupTextRefs}
-            className="hero-sub-heading col-span-full tablet:col-start-4 desktop:col-start-7 z-10 tablet:-translate-y-20 desktop:-translate-y-0"
-            data-lag="0.15"
+            className={`hero-sub-heading tablet:col-start-4 desktop:col-start-7 tablet:-translate-y-20 desktop:-translate-y-0 z-10 col-span-full ${drukWide.className}`}
           >
             “Turning brand <br />
             into tab everyone <br />
             keeps open”
           </h2>
 
-          <div className="flex flex-col items-end gap-y-4 tablet:gap-y-8 justify-end col-span-full z-10">
-            <div className="grid grid-cols-4 tablet:grid-cols-8 desktop:grid-cols-12 w-full tablet:text-lg">
-              <div className="flex justify-end gap-x-3 tablet:gap-x-7 tablet:text-lg desktop:text-xl col-span-3 tablet:col-span-4 col-end-5 tablet:col-end-8">
-                <span ref={addToSlideupTextRefs} data-lag="0.2">
-                  Independent
-                </span>
-                <span ref={addToSlideupTextRefs} data-lag="0.25">
-                  Creative
-                </span>
-                <span ref={addToSlideupTextRefs} data-lag="0.3">
-                  Studio
-                </span>
+          <div className="tablet:gap-y-8 z-10 col-span-full flex flex-col items-end justify-end gap-y-4">
+            <div className="tablet:grid-cols-8 desktop:grid-cols-12 tablet:text-lg grid w-full grid-cols-4">
+              <div className="tablet:gap-x-7 tablet:text-lg desktop:text-xl tablet:col-span-4 tablet:col-end-8 col-span-3 col-end-5 flex justify-end gap-x-3 text-base">
+                <span ref={addToSlideupTextRefs}>Independent</span>
+                <span ref={addToSlideupTextRefs}>Creative</span>
+                <span ref={addToSlideupTextRefs}>Studio</span>
               </div>
             </div>
 
             <h1
               ref={addToSlideupTextRefs}
-              className="text-7xl tablet:text-[9rem] desktop:text-[16rem] font-[DrukWide] cursor-default"
-              data-lag="0.45"
+              className={`h1-responsive cursor-default ${drukWide.className}`}
             >
               azlhart
             </h1>
           </div>
         </div>
 
-        <LogoSVG refs={[logoRef, logoPathRef]} />
+        <LogoSVG refs={[logoRef, logoPathRef]} className="opacity-50" />
       </div>
+
+      <video
+        ref={heroVideoRef}
+        className="absolute-center h-full w-full object-cover brightness-50"
+        autoPlay
+        loop
+        muted
+        playsInline
+      >
+        <source src="/videos/hero.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
     </section>
   );
 };
