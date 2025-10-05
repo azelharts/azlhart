@@ -79,8 +79,16 @@ span {
   @apply tablet:text-sm text-xs;
 }
 
-.icon-responsive {
-  @apply tablet:min-w-4 tablet:min-h-4 min-h-3.5 min-w-3.5;
+.cta-p-responsive {
+  @apply tablet:text-lg desktop:text-xl text-base;
+}
+
+.cta-icon-responsive {
+  @apply tablet:min-w-5 tablet:min-h-5 desktop:min-w-6 desktop:min-h-6 min-h-4 min-w-4;
+}
+
+.about-p {
+  @apply desktop:text-[4.25rem] text-4xl !leading-[125%] font-semibold;
 }
 
 .text-stroke {

@@ -6,15 +6,54 @@ import Image from "next/image";
 
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
+import SplitText from "gsap/dist/SplitText";
+import CustomEase from "gsap/dist/CustomEase";
+
 import Header from "@/components/Header";
-import { drukWide } from "@/lib/utils";
 import CTA from "@/components/CTA";
 
 const AboutSection = () => {
   const aboutRef = useRef<HTMLElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const firstParagraph = useRef<HTMLParagraphElement>(null);
+  const secondParagraph = useRef<HTMLParagraphElement>(null);
 
   useGSAP(() => {
-    gsap.registerPlugin();
+    gsap.registerPlugin(SplitText, CustomEase);
+    CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+
+    document.fonts.ready.then(() => {
+      const split = [firstParagraph, secondParagraph].map((el) =>
+        SplitText.create(el.current, {
+          type: "lines",
+          autoSplit: true,
+          mask: "lines",
+          onSplit: (self) => {
+            return gsap.from(self.lines, {
+              scrollTrigger: {
+                trigger: el.current,
+                start: "top bottom",
+                once: true,
+              },
+              y: "100%",
+              stagger: 0.075,
+              ease: "custom",
+            });
+          },
+        }),
+      );
+
+      gsap.from(imageRef.current, {
+        scrollTrigger: {
+          trigger: imageRef.current,
+          start: "top bottom",
+          once: true,
+        },
+        clipPath: "inset(0% 0% 100% 0%)",
+        duration: 0.75,
+        ease: "custom",
+      });
+    });
   });
 
   return (
@@ -27,9 +66,10 @@ const AboutSection = () => {
           subText="visual-thinker"
         />
 
-        <div className="custom-grid h-fit gap-y-16 py-16">
-          <div className="tablet:col-start-4 tablet:h-[250px] desktop:col-start-7 tablet:opacity-100 relative col-span-2 mt-16 h-[115px] opacity-0">
+        <div className="custom-grid tablet:gap-y-6 desktop:gap-y-16 h-fit gap-y-16 py-16">
+          <div className="tablet:col-start-4 tablet:h-[250px] desktop:col-start-7 tablet:block relative col-span-2 hidden h-[115px]">
             <Image
+              ref={imageRef}
               src="/images/landing-1.jpg"
               alt=""
               fill
@@ -37,16 +77,13 @@ const AboutSection = () => {
             />
           </div>
 
-          <p
-            className={`tablet:indent-[100px] desktop:indent-[400px] desktop:text-7xl tablet:text-6xl tablet:!leading-[3.875rem] desktop:!leading-[4.75rem] col-span-full text-4xl !leading-[2.625rem] font-semibold`}
-          >
+          <p ref={firstParagraph} className="about-p col-span-full">
+            <span className="tablet:inline-block desktop:w-[400px] hidden w-[100px]" />
             Shaping digital worlds with motion, precision, and bold expression.
             Designing for impact, developing for performance, and crafting
             experiences that feel alive.
           </p>
-          <p
-            className={`tablet:mt-0 tablet:text-6xl desktop:text-7xl tablet:!leading-[3.875rem] desktop:!leading-[4.75rem] col-span-full text-4xl !leading-[2.625rem] font-semibold`}
-          >
+          <p ref={secondParagraph} className="about-p col-span-full">
             Every project begins with intention from visual identity to
             interaction. We design with purpose, helping brands move with
             confidence and stand out with timeless relevance.
@@ -54,7 +91,8 @@ const AboutSection = () => {
 
           <CTA
             text="more about us"
-            className="p-responsive tablet:col-end-7 desktop:col-end-11 col-end-5"
+            className="cta-p-responsive tablet:col-end-7 desktop:col-end-11 col-end-5"
+            ctaIcon
           />
         </div>
       </div>

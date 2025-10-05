@@ -11,8 +11,6 @@ import { useGSAP } from "@gsap/react";
 
 import LogoSVG from "./LogoSVG";
 
-import { ArrowRight } from "lucide-react";
-
 import CTA from "./CTA";
 import ScrambleText from "./ScrambleText";
 
@@ -40,7 +38,7 @@ const Navbar = () => {
   const handleLogoMouseEnter = contextSafe(() => {
     gsap.to(logoRef.current, {
       duration: 0.5,
-      ease: "power3.inOut",
+      ease: "power2.inOut",
       fill: "#FFFFFF",
       fillOpacity: 1,
     });
@@ -49,7 +47,7 @@ const Navbar = () => {
   const handleLogoMouseLeave = contextSafe(() => {
     gsap.to(logoRef.current, {
       duration: 0.5,
-      ease: "power3.inOut",
+      ease: "power2.inOut",
       fillOpacity: 0,
     });
   });

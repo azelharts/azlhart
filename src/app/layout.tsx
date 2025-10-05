@@ -3,7 +3,7 @@
 import "./globals.css";
 
 import { usePathname } from "next/navigation";
-import { Bricolage_Grotesque } from "next/font/google";
+import { Inter } from "next/font/google";
 
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -12,7 +12,7 @@ import ScrollSmoother from "gsap/dist/ScrollSmoother";
 
 import Navbar from "@/components/Navbar";
 
-const bricolageGrotesque = Bricolage_Grotesque({
+const inter = Inter({
   subsets: ["latin"],
 });
 
@@ -38,7 +38,7 @@ export default function RootLayout({
   );
 
   return (
-    <html lang="en" className={`${bricolageGrotesque.className} antialiased`}>
+    <html lang="en" className={`${inter.className} antialiased`}>
       <head>
         <title>Azlhart® - Independent Creative Studio</title>
       </head>
