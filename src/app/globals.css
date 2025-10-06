@@ -67,11 +67,15 @@ span {
   @apply tablet:text-lg desktop:text-xl text-xs;
 }
 
+.p-service-responsive {
+  @apply tablet:text-2xl desktop:text-[2rem] text-xl;
+}
+
 .h1-responsive {
   @apply tablet:text-[9.5rem] desktop:text-[16rem] text-[4rem];
 }
 
-.h2-responsive {
+.h3-responsive {
   @apply tablet:text-4xl desktop:text-5xl text-2xl;
 }
 
