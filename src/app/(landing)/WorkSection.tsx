@@ -37,8 +37,55 @@ const featuredWorks = [
 
 const WorkSection = () => {
   const workRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const totalWorkRef = useRef<HTMLSpanElement[]>([]);
 
-  useGSAP(() => {}, { scope: workRef });
+  const addToTotalWorkRefs = (element: HTMLSpanElement | null) => {
+    if (element && !totalWorkRef.current.includes(element)) {
+      totalWorkRef.current.push(element);
+    }
+  };
+
+  useGSAP(
+    () => {
+      gsap.registerPlugin(SplitText, CustomEase);
+      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+
+      document.fonts.ready.then(() => {
+        SplitText.create(headingRef.current, {
+          type: "lines",
+          autoSplit: true,
+          mask: "lines",
+          onSplit: (self) => {
+            return gsap.from(self.lines, {
+              scrollTrigger: {
+                trigger: headingRef.current,
+                start: "top bottom",
+                once: true,
+              },
+              y: "100%",
+              stagger: 0.075,
+              ease: "custom",
+            });
+          },
+        });
+
+        totalWorkRef.current.forEach((el) => {
+          gsap.from(el, {
+            scrollTrigger: {
+              trigger: el,
+              start: "top bottom",
+              once: true,
+            },
+            duration: 0.75,
+            opacity: 0,
+            ease: "custom",
+          });
+        });
+      });
+    },
+    { scope: workRef },
+  );
 
   return (
     <section className="relative flex flex-col overflow-clip" ref={workRef}>
@@ -51,6 +98,7 @@ const WorkSection = () => {
 
         <div className="custom-grid desktop:gap-y-32 h-fit gap-y-16 py-16">
           <h3
+            ref={headingRef}
             className={`h3-responsive tablet:col-span-5 desktop:col-span-7 col-span-4 !leading-[125%] uppercase ${drukWide.className}`}
           >
             Frames that speak louder than words
@@ -63,7 +111,10 @@ const WorkSection = () => {
               ctaIcon
               className="tablet:translate-y-0 cta-p-responsive translate-y-2"
             />
-            <span className={`h3-responsive ${drukWide.className}`}>
+            <span
+              ref={addToTotalWorkRefs}
+              className={`h3-responsive ${drukWide.className}`}
+            >
               &#91;9&#93;
             </span>
           </div>
@@ -75,6 +126,7 @@ const WorkSection = () => {
             className="desktop:flex cta-p-responsive col-span-2 col-end-11 hidden self-end"
           />
           <span
+            ref={addToTotalWorkRefs}
             className={`h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
           >
             &#91;9&#93;

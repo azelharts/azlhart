@@ -54,7 +54,7 @@ const Navbar = () => {
 
   return (
     <nav
-      className="max-w-container desktop:top-9 tablet:px-9 custom-grid p-responsive invisible fixed top-[20px] left-1/2 z-50 w-full -translate-x-1/2 px-[20px] mix-blend-difference"
+      className="max-w-container desktop:top-8 tablet:px-6 custom-grid p-responsive invisible fixed top-[20px] left-1/2 z-50 w-full -translate-x-1/2 px-[20px] mix-blend-difference"
       ref={navRef}
       id="navbar"
     >

@@ -44,7 +44,7 @@ span {
 }
 
 .px-container {
-  @apply tablet:px-9 desktop:py-9 px-[20px] py-[20px];
+  @apply tablet:px-6 desktop:py-8 px-[20px] py-[20px];
 }
 
 .max-w-container {
