@@ -1,6 +1,7 @@
 import HeroSection from "./HeroSection";
 import AboutSection from "./AboutSection";
 import ServiceSection from "./ServiceSection";
+import WorkSection from "./WorkSection";
 
 const Home = () => {
   return (
@@ -8,6 +9,7 @@ const Home = () => {
       <HeroSection />
       <AboutSection />
       <ServiceSection />
+      <WorkSection />
       <section className="h-screen w-full" />
     </main>
   );

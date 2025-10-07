@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef } from "react";
+import { RefObject, useRef } from "react";
+
+import Image from "next/image";
 
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -10,7 +12,6 @@ import CustomEase from "gsap/CustomEase";
 import Header from "@/components/Header";
 
 import { drukWide } from "@/lib/utils";
-import Image from "next/image";
 
 const services = [
   {
@@ -41,10 +42,7 @@ const ServiceSection = () => {
   const serviceDescriptionRefs = useRef<HTMLParagraphElement[]>([]);
   const serviceImageRefs = useRef<HTMLDivElement[]>([]);
 
-  // Generic helper to add refs to arrays
-  const addToRefs = <T extends HTMLElement>(
-    refsArray: React.MutableRefObject<T[]>,
-  ) => {
+  const addToRefs = <T extends HTMLElement>(refsArray: RefObject<T[]>) => {
     return (el: T | null) => {
       if (el && !refsArray.current.includes(el)) {
         refsArray.current.push(el);
@@ -58,63 +56,63 @@ const ServiceSection = () => {
     once: true,
   };
 
-  useGSAP(() => {
-    gsap.registerPlugin(SplitText, CustomEase);
-    CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+  useGSAP(
+    () => {
+      gsap.registerPlugin(SplitText, CustomEase);
+      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
 
-    document.fonts.ready.then(() => {
-      // Animate descriptions with SplitText
-      serviceDescriptionRefs.current.forEach((el) => {
-        SplitText.create(el, {
-          type: "lines",
-          autoSplit: true,
-          mask: "lines",
-          onSplit: (self) => {
-            gsap.from(self.lines, {
-              scrollTrigger: {
-                trigger: el,
-                ...scrollTriggerConfig,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: "custom",
-            });
-          },
+      document.fonts.ready.then(() => {
+        serviceDescriptionRefs.current.forEach((el) => {
+          SplitText.create(el, {
+            type: "lines",
+            autoSplit: true,
+            mask: "lines",
+            onSplit: (self) => {
+              gsap.from(self.lines, {
+                scrollTrigger: {
+                  trigger: el,
+                  ...scrollTriggerConfig,
+                },
+                y: "100%",
+                stagger: 0.075,
+                ease: "custom",
+              });
+            },
+          });
+        });
+
+        for (let i = 0; i < serviceNumberAndTitleRefs.current.length; i += 2) {
+          const numberAndTitle = [
+            serviceNumberAndTitleRefs.current[i],
+            serviceNumberAndTitleRefs.current[i + 1],
+          ];
+
+          gsap.from(numberAndTitle, {
+            scrollTrigger: {
+              trigger: numberAndTitle[0],
+              ...scrollTriggerConfig,
+            },
+            duration: 0.75,
+            opacity: 0,
+            ease: "custom",
+          });
+        }
+
+        serviceImageRefs.current.forEach((el) => {
+          gsap.from(el, {
+            scrollTrigger: {
+              trigger: el,
+              ...scrollTriggerConfig,
+            },
+            clipPath: "inset(0% 0% 100% 0%)",
+            duration: 0.75,
+            ease: "custom",
+          });
         });
       });
-
-      // Animate number and title pairs
-      for (let i = 0; i < serviceNumberAndTitleRefs.current.length; i += 2) {
-        const numberAndTitle = [
-          serviceNumberAndTitleRefs.current[i],
-          serviceNumberAndTitleRefs.current[i + 1],
-        ];
-
-        gsap.from(numberAndTitle, {
-          scrollTrigger: {
-            trigger: numberAndTitle[0],
-            ...scrollTriggerConfig,
-          },
-          duration: 0.75,
-          opacity: 0,
-          ease: "custom",
-        });
-      }
-
-      // Animate images with clip-path
-      serviceImageRefs.current.forEach((el) => {
-        gsap.from(el, {
-          scrollTrigger: {
-            trigger: el,
-            ...scrollTriggerConfig,
-          },
-          clipPath: "inset(0% 0% 100% 0%)",
-          duration: 0.75,
-          ease: "custom",
-        });
-      });
-    });
-  });
+    },
+    { scope: serviceRef },
+  );
 
   return (
     <section className="relative flex flex-col overflow-clip" ref={serviceRef}>

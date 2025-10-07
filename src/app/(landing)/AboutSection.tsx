@@ -18,43 +18,46 @@ const AboutSection = () => {
   const firstParagraph = useRef<HTMLParagraphElement>(null);
   const secondParagraph = useRef<HTMLParagraphElement>(null);
 
-  useGSAP(() => {
-    gsap.registerPlugin(SplitText, CustomEase);
-    CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+  useGSAP(
+    () => {
+      gsap.registerPlugin(SplitText, CustomEase);
+      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
 
-    document.fonts.ready.then(() => {
-      const split = [firstParagraph, secondParagraph].map((el) =>
-        SplitText.create(el.current, {
-          type: "lines",
-          autoSplit: true,
-          mask: "lines",
-          onSplit: (self) => {
-            return gsap.from(self.lines, {
-              scrollTrigger: {
-                trigger: el.current,
-                start: "top bottom",
-                once: true,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: "custom",
-            });
+      document.fonts.ready.then(() => {
+        const split = [firstParagraph, secondParagraph].map((el) =>
+          SplitText.create(el.current, {
+            type: "lines",
+            autoSplit: true,
+            mask: "lines",
+            onSplit: (self) => {
+              return gsap.from(self.lines, {
+                scrollTrigger: {
+                  trigger: el.current,
+                  start: "top bottom",
+                  once: true,
+                },
+                y: "100%",
+                stagger: 0.075,
+                ease: "custom",
+              });
+            },
+          }),
+        );
+
+        gsap.from(imageRef.current, {
+          scrollTrigger: {
+            trigger: imageRef.current,
+            start: "top bottom",
+            once: true,
           },
-        }),
-      );
-
-      gsap.from(imageRef.current, {
-        scrollTrigger: {
-          trigger: imageRef.current,
-          start: "top bottom",
-          once: true,
-        },
-        clipPath: "inset(0% 0% 100% 0%)",
-        duration: 0.75,
-        ease: "custom",
+          clipPath: "inset(0% 0% 100% 0%)",
+          duration: 0.75,
+          ease: "custom",
+        });
       });
-    });
-  });
+    },
+    { scope: aboutRef },
+  );
 
   return (
     <section className="relative flex flex-col overflow-clip" ref={aboutRef}>
