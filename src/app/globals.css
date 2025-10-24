@@ -52,7 +52,7 @@ span {
 }
 
 .custom-grid {
-  @apply tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9 grid grid-cols-4;
+  @apply tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9 grid grid-cols-4 gap-x-8;
 }
 
 .hero-sub-heading {
