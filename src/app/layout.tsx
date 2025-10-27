@@ -31,6 +31,7 @@ export default function RootLayout({
     () => {
       ScrollSmoother.create({
         smooth: 1.5,
+        smoothTouch: 0.25,
         effects: true,
       });
     },

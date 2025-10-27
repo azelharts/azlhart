@@ -11,7 +11,7 @@ const Home = () => {
       <AboutSection />
       <ServiceSection />
       <WorkSection />
-      <div className="h-[400vh] border border-red-500">
+      <div className="h-[800vh] border border-red-500">
         <ProcessSection />
       </div>
       <section className="h-screen w-full" />
