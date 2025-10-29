@@ -24,7 +24,7 @@ const AboutSection = () => {
       CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
 
       document.fonts.ready.then(() => {
-        const split = [firstParagraph, secondParagraph].map((el) =>
+        [firstParagraph, secondParagraph].map((el) =>
           SplitText.create(el.current, {
             type: "lines",
             autoSplit: true,

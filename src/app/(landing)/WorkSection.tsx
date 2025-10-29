@@ -133,7 +133,7 @@ const WorkSection = () => {
           </span>
 
           <div className="col-span-full flex flex-col gap-y-8">
-            {featuredWorks.map((work, idx) => (
+            {featuredWorks.map((work) => (
               <div
                 key={work.workTitle}
                 className="relative h-screen w-full overflow-hidden"
