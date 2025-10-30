@@ -74,7 +74,6 @@ const animateElements = (
     gsap.to(target, {
       duration: ANIMATION_DURATION,
       ease: EASE,
-
       ...props,
     });
   });
@@ -92,6 +91,24 @@ const ProcessSection = () => {
         const bars = gsap.utils.toArray(".process_progress") as HTMLElement[];
         const scrollFlags = [false, false, false];
 
+        // Create SplitText instances for all descriptions
+        const splitInstances = PROCESSES.map((process) => {
+          return SplitText.create(`#process_description_${process.id}`, {
+            type: "lines",
+            mask: "lines",
+            autoSplit: true,
+          });
+        });
+
+        gsap.set(
+          [
+            splitInstances[1].lines,
+            splitInstances[2].lines,
+            splitInstances[3].lines,
+          ],
+          { y: "100%" },
+        );
+
         // Main timeline
         const tl = gsap.timeline({
           scrollTrigger: {
@@ -100,7 +117,6 @@ const ProcessSection = () => {
             end: "+=700%",
             pin: true,
             scrub: true,
-            markers: true,
             onUpdate: (self) => {
               SCROLL_THRESHOLDS.forEach((threshold, index) => {
                 const current = index + 1;
@@ -108,6 +124,20 @@ const ProcessSection = () => {
 
                 // Scroll Down
                 if (self.progress >= threshold && !scrollFlags[index]) {
+                  // Reset next description lines
+                  gsap.to(splitInstances[current - 1].lines, {
+                    y: "-100%",
+                    stagger: 0.075,
+                    ease: EASE,
+                  });
+
+                  // Animate next description lines
+                  gsap.to(splitInstances[current].lines, {
+                    y: "0%",
+                    stagger: 0.075,
+                    ease: EASE,
+                  });
+
                   animateElements([
                     // Numbers
                     { target: `#process_number_${current}`, opacity: 0 },
@@ -136,24 +166,25 @@ const ProcessSection = () => {
                       target: `.process_images_label_${current}`,
                       opacity: 1,
                     },
-
-                    // Descriptions
-                    {
-                      target: `#process_description_${current}`,
-                      opacity: 0,
-                      y: "-50px",
-                    },
-                    {
-                      target: `#process_description_${next}`,
-                      opacity: 1,
-                      y: 0,
-                    },
                   ]);
                   scrollFlags[index] = true;
                 }
 
                 // Scroll Up
                 if (self.progress <= threshold && scrollFlags[index]) {
+                  gsap.to(splitInstances[current - 1].lines, {
+                    y: "0",
+                    stagger: 0.075,
+                    ease: EASE,
+                  });
+
+                  // Animate next description lines
+                  gsap.to(splitInstances[current].lines, {
+                    y: "100%",
+                    stagger: 0.075,
+                    ease: EASE,
+                  });
+
                   animateElements([
                     // Numbers
                     { target: `#process_number_${current}`, opacity: 1 },
@@ -182,18 +213,6 @@ const ProcessSection = () => {
                       target: `.process_images_label_${current}`,
                       opacity: 0,
                     },
-
-                    // Descriptions
-                    {
-                      target: `#process_description_${current}`,
-                      opacity: 1,
-                      y: 0,
-                    },
-                    {
-                      target: `#process_description_${next}`,
-                      opacity: 0,
-                      y: "50px",
-                    },
                   ]);
                   scrollFlags[index] = false;
                 }
@@ -211,27 +230,19 @@ const ProcessSection = () => {
         PROCESSES.forEach((process, index) => {
           const isFirst = index === 0;
 
-          // Split text animation for descriptions
-          SplitText.create(`#process_description_${process.id}`, {
-            type: "lines",
-            autoSplit: true,
-            mask: "lines",
-            onSplit: (self) => {
-              gsap.from(self.lines, {
-                scrollTrigger: {
-                  trigger: `#process_description_${process.id}`,
-                  start: "top bottom",
-                  once: true,
-                },
-                y: "100%",
-                stagger: 0.075,
-                ease: EASE,
-              });
-            },
-          });
-
-          // Initial fade in for first process
+          // Split text animation for first description only
           if (isFirst) {
+            gsap.from(splitInstances[0].lines, {
+              scrollTrigger: {
+                trigger: `#process_description_${process.id}`,
+                start: "top bottom",
+                once: true,
+              },
+              y: "100%",
+              stagger: 0.075,
+              ease: EASE,
+            });
+
             gsap.from(
               [`#process_number_${process.id}`, `#process_title_${process.id}`],
               {
@@ -301,7 +312,7 @@ const ProcessSection = () => {
           </div>
 
           {/* Progress Bar */}
-          <div className="tablet:col-span-6 tablet:col-start-3 desktop:col-start-1 desktop:row-start-3 desktop:self-end col-span-4 flex justify-between">
+          <div className="tablet:col-span-6 tablet:col-start-3 desktop:col-start-1 desktop:row-start-3 desktop:self-start col-span-4 flex justify-between">
             {new Array(20).fill(null).map((_, idx) => (
               <div
                 key={idx}
@@ -339,7 +350,7 @@ const ProcessSection = () => {
               {PROCESSES.map((process, idx) => (
                 <span
                   key={idx}
-                  className={`absolute top-0 left-0 text-sm text-white capitalize ${
+                  className={`tablet:inline absolute top-0 left-0 hidden text-sm text-white capitalize ${
                     idx > 0 ? "opacity-0" : ""
                   } ${
                     idx === 0
@@ -425,14 +436,17 @@ const ProcessSection = () => {
             </div>
           </div>
 
-          <p
-            id="process_description_one"
-            className="p-service-responsive desktop:col-start-7 desktop:!text-2xl tablet:col-span-7 desktop:col-span-6 col-span-4 self-end !leading-[125%] text-white/50"
-          >
-            We dive deep into your brand, goals, and audience to uncover
-            insights that guide meaningful decisions. Every great solution
-            starts with asking the right questions.
-          </p>
+          <div className="desktop:col-start-7 tablet:col-span-7 desktop:col-span-6 relative col-span-4 h-full self-start">
+            {PROCESSES.map((process, idx) => (
+              <p
+                key={process.id}
+                id={`process_description_${process.id}`}
+                className="p-service-responsive desktop:!text-2xl absolute top-0 left-0 !leading-[125%] text-white/50"
+              >
+                {process.description}
+              </p>
+            ))}
+          </div>
         </div>
       </div>
     </section>
