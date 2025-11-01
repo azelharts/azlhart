@@ -3,6 +3,8 @@ import AboutSection from "./AboutSection";
 import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 import ProcessSection from "./ProcessSection";
+import FAQSection from "./FAQSection";
+import FrameSection from "./FrameSection";
 
 const Home = () => {
   return (
@@ -14,6 +16,8 @@ const Home = () => {
       <div className="h-[800vh]">
         <ProcessSection />
       </div>
+      <FrameSection />
+      <FAQSection />
       <section className="h-screen w-full" />
     </main>
   );
