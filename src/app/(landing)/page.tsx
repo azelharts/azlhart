@@ -16,8 +16,8 @@ const Home = () => {
       <div className="h-[800vh]">
         <ProcessSection />
       </div>
-      <FrameSection />
       <FAQSection />
+      <FrameSection />
       <section className="h-screen w-full" />
     </main>
   );
