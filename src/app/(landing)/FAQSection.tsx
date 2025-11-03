@@ -62,6 +62,64 @@ const FAQS = [
 const FAQSection = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const faqButtonsRef = useRef<HTMLSpanElement[]>([]);
+
+  const addTofaqButtonsRefs = (element: HTMLSpanElement | null) => {
+    if (element && !faqButtonsRef.current.includes(element)) {
+      faqButtonsRef.current.push(element);
+    }
+  };
+
+  useGSAP(
+    () => {
+      gsap.registerPlugin(SplitText, CustomEase);
+      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+
+      document.fonts.ready.then(() => {
+        SplitText.create(headingRef.current, {
+          type: "lines",
+          autoSplit: true,
+          mask: "lines",
+          onSplit: (self) => {
+            return gsap.from(self.lines, {
+              scrollTrigger: {
+                trigger: headingRef.current,
+                start: "top bottom",
+                once: true,
+              },
+              y: "100%",
+              stagger: 0.075,
+              ease: "custom",
+            });
+          },
+        });
+
+        gsap.from(imageRef.current, {
+          scrollTrigger: {
+            trigger: imageRef.current,
+          },
+          clipPath: "inset(0% 0% 100% 0%)",
+          duration: 0.75,
+          ease: "custom",
+        });
+
+        faqButtonsRef.current.forEach((el) => {
+          gsap.from(el, {
+            scrollTrigger: {
+              trigger: el,
+              start: "top bottom",
+              once: true,
+            },
+            duration: 0.75,
+            opacity: 0,
+            ease: "custom",
+          });
+        });
+      });
+    },
+    { scope: containerRef },
+  );
   return (
     <section
       className="relative flex flex-col overflow-clip"
@@ -87,6 +145,7 @@ const FAQSection = () => {
           <div className="tablet:col-span-4 desktop:col-start-7 desktop:col-span-6 tablet:order-3 tablet:col-start-5 col-span-full flex flex-col gap-y-4">
             {FAQS.map((faq, idx) => (
               <button
+                ref={addTofaqButtonsRefs}
                 key={idx}
                 className="flex h-[60px] w-full justify-between bg-white/5 px-4"
               >
@@ -115,6 +174,7 @@ const FAQSection = () => {
             </div>
             <div className="tablet:h-[350px] relative h-[160px]">
               <Image
+                ref={imageRef}
                 src="/images/faq.jpg"
                 alt=""
                 fill

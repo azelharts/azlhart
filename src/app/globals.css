@@ -68,7 +68,7 @@ span {
 }
 
 .p-service-responsive {
-  @apply tablet:text-2xl desktop:text-[2rem] text-xl;
+  @apply tablet:text-2xl desktop:text-[2rem] text-xl font-light;
 }
 
 .h1-responsive {
@@ -80,11 +80,11 @@ span {
 }
 
 .p-responsive {
-  @apply tablet:text-sm text-xs;
+  @apply tablet:text-sm text-xs font-light;
 }
 
 .cta-p-responsive {
-  @apply tablet:text-lg desktop:text-xl text-base;
+  @apply tablet:text-lg desktop:text-xl text-base font-light;
 }
 
 .cta-icon-responsive {
