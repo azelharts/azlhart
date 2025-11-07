@@ -1,20 +1,20 @@
 "use client";
 
-import { RefObject, useRef } from "react";
+import { useRef, useState } from "react";
 
 import Image from "next/image";
 
-import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import SplitText from "gsap/dist/SplitText";
+import gsap from "gsap";
 import CustomEase from "gsap/CustomEase";
+import SplitText from "gsap/dist/SplitText";
 
 import Header from "@/components/Header";
 
+import CTA from "@/components/CTA";
+import CurrentTime from "@/components/CurrentTime";
 import { drukWide } from "@/lib/utils";
 import { Plus } from "lucide-react";
-import CurrentTime from "@/components/CurrentTime";
-import CTA from "@/components/CTA";
 
 const FAQS = [
   {
@@ -25,12 +25,12 @@ const FAQS = [
   {
     question: "How do we start working together?",
     answer:
-      "Simply reach out through my contact form or email. We’ll schedule a discovery call to understand your vision, goals, and timeline before creating a tailored proposal.",
+      "Simply reach out through my contact form or email. We'll schedule a discovery call to understand your vision, goals, and timeline before creating a tailored proposal.",
   },
   {
     question: "Do you work with international clients?",
     answer:
-      "Yes — I collaborate remotely with clients around the world and adapt seamlessly across time zones and workflows.",
+      "Yes, I collaborate remotely with clients around the world and adapt seamlessly across time zones and workflows.",
   },
   {
     question: "What is your typical turnaround time?",
@@ -45,7 +45,7 @@ const FAQS = [
   {
     question: "How much does a typical project cost?",
     answer:
-      "Pricing varies depending on the project’s scale, complexity, and requirements. After our discovery call, I’ll provide a detailed proposal that reflects your goals and deliverables.",
+      "Pricing varies depending on the project's scale, complexity, and requirements. After our discovery call, I'll provide a detailed proposal that reflects your goals and deliverables.",
   },
   {
     question: "Do you require a deposit?",
@@ -53,23 +53,117 @@ const FAQS = [
       "Yes. I typically require a 30%-50% upfront deposit to secure your project in my schedule, with the remaining balance due upon completion or launch.",
   },
   {
-    question: "What’s your process like?",
+    question: "What's your process like?",
     answer:
       "Each project begins with a discovery call, followed by design phases, client reviews, and hands-on development.",
   },
 ];
 
+const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const answerRef = useRef<HTMLSpanElement>(null);
+  const iconRef = useRef<SVGSVGElement>(null);
+
+  const { contextSafe } = useGSAP(
+    () => {
+      gsap.registerPlugin(CustomEase);
+      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+    },
+    { scope: buttonRef },
+  );
+
+  const toggleFAQ = contextSafe(() => {
+    const tl = gsap.timeline();
+
+    if (!isOpen) {
+      // Get the actual heights before animating
+      const answerHeight = answerRef.current?.scrollHeight || 0;
+      const totalHeight = 60 + 8 + 30 + answerHeight;
+      console.log("answer height:", answerHeight);
+      console.log("total height:", totalHeight);
+
+      // Opening animation
+      tl.to(buttonRef.current, {
+        height: totalHeight,
+        duration: 0.75,
+        ease: "custom",
+      })
+        .to(
+          answerRef.current,
+          {
+            height: answerHeight,
+            opacity: 1,
+            duration: 0.75,
+            ease: "custom",
+          },
+          "<",
+        )
+        .to(
+          iconRef.current,
+          {
+            rotation: 45,
+            duration: 0.75,
+            ease: "custom",
+          },
+          "<",
+        );
+    } else {
+      // Closing animation
+      tl.to(buttonRef.current, {
+        height: 60,
+        duration: 0.75,
+        ease: "custom",
+      })
+        .to(
+          iconRef.current,
+          {
+            rotation: 0,
+            duration: 0.75,
+            ease: "custom",
+          },
+          "<",
+        )
+        .to(
+          answerRef.current,
+          {
+            height: 0,
+            opacity: 0,
+            duration: 0.75,
+            ease: "custom",
+          },
+          "<",
+        );
+    }
+
+    setIsOpen(!isOpen);
+  });
+
+  return (
+    <button
+      ref={buttonRef}
+      onClick={toggleFAQ}
+      className="faq-item flex h-[60px] w-full flex-col overflow-clip bg-white/5 px-4 transition-colors ease-in-out hover:bg-white/10"
+    >
+      <div className="flex min-h-[60px] w-full items-center justify-between">
+        <span className="p-responsive text-left">{faq.question}</span>
+        <Plus ref={iconRef} width={16} height={16} className="shrink-0" />
+      </div>
+      <span
+        ref={answerRef}
+        className="p-responsive mt-2 mb-[30px] h-0 max-w-[90%] text-left !leading-[125%] text-white/50 opacity-0"
+      >
+        {faq.answer}
+      </span>
+    </button>
+  );
+};
+
 const FAQSection = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
-  const faqButtonsRef = useRef<HTMLSpanElement[]>([]);
-
-  const addTofaqButtonsRefs = (element: HTMLSpanElement | null) => {
-    if (element && !faqButtonsRef.current.includes(element)) {
-      faqButtonsRef.current.push(element);
-    }
-  };
+  const faqItemsRef = useRef<HTMLDivElement>(null);
 
   useGSAP(
     () => {
@@ -95,31 +189,30 @@ const FAQSection = () => {
           },
         });
 
-        gsap.from(imageRef.current, {
-          scrollTrigger: {
-            trigger: imageRef.current,
-          },
-          clipPath: "inset(0% 0% 100% 0%)",
-          duration: 0.75,
-          ease: "custom",
-        });
+        // gsap.from(imageRef.current, {
+        //   scrollTrigger: {
+        //     trigger: imageRef.current,
+        //   },
+        //   clipPath: "inset(0% 0% 100% 0%)",
+        //   duration: 0.75,
+        //   ease: "custom",
+        // });
 
-        faqButtonsRef.current.forEach((el) => {
-          gsap.from(el, {
-            scrollTrigger: {
-              trigger: el,
-              start: "top bottom",
-              once: true,
-            },
-            duration: 0.75,
-            opacity: 0,
-            ease: "custom",
-          });
+        gsap.from(".faq-item", {
+          scrollTrigger: {
+            trigger: faqItemsRef.current,
+            start: "top bottom",
+            once: true,
+          },
+          duration: 0.75,
+          opacity: 0,
+          ease: "custom",
         });
       });
     },
     { scope: containerRef },
   );
+
   return (
     <section
       className="relative flex flex-col overflow-clip"
@@ -135,25 +228,19 @@ const FAQSection = () => {
             Your questions, our clear answer
           </h3>
 
-          <div className="tablet:col-span-3 tablet:justify-self-end tablet:items-end tablet:flex-col desktop:col-span-5 tablet:jusity-start col-span-full flex items-center justify-between gap-y-8">
+          <div className="tablet:col-span-3 tablet:justify-self-end tablet:items-end tablet:flex-col desktop:col-span-5 tablet:jusity-start col-span-full flex items-center justify-between gap-x-4 gap-y-8">
             <p className="cta-p-responsive text-white/50">
-              Don't find what you're looking for?
+              Don&apos;t find what you&apos;re looking for?
             </p>
             <CTA text="contact us" />
           </div>
 
-          <div className="tablet:col-span-4 desktop:col-start-7 desktop:col-span-6 tablet:order-3 tablet:col-start-5 col-span-full flex flex-col gap-y-4">
+          <div
+            ref={faqItemsRef}
+            className="tablet:col-span-4 desktop:col-start-7 desktop:col-span-6 tablet:order-3 tablet:col-start-5 col-span-full flex flex-col gap-y-4"
+          >
             {FAQS.map((faq, idx) => (
-              <button
-                ref={addTofaqButtonsRefs}
-                key={idx}
-                className="flex h-[60px] w-full justify-between bg-white/5 px-4"
-              >
-                <div className="flex w-full items-center justify-between">
-                  <span className="p-responsive">{faq.question}</span>
-                  <Plus width={16} height={16} />
-                </div>
-              </button>
+              <FAQItem key={idx} faq={faq} index={idx} />
             ))}
           </div>
 

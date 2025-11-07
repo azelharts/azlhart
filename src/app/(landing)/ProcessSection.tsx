@@ -437,7 +437,7 @@ const ProcessSection = () => {
           </div>
 
           <div className="desktop:col-start-7 tablet:col-span-7 desktop:col-span-6 relative col-span-4 h-full self-start">
-            {PROCESSES.map((process, idx) => (
+            {PROCESSES.map((process) => (
               <p
                 key={process.id}
                 id={`process_description_${process.id}`}
