@@ -4,6 +4,7 @@ import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 import ProcessSection from "./ProcessSection";
 import FAQSection from "./FAQSection";
+import TestimonialSection from "./TestimonialSection";
 import FrameSection from "./FrameSection";
 
 const Home = () => {
@@ -18,6 +19,7 @@ const Home = () => {
       </div>
       <FAQSection />
       <FrameSection />
+      <TestimonialSection />
       <section className="h-screen w-full" />
     </main>
   );

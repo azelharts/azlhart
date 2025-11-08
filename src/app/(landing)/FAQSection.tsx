@@ -80,8 +80,6 @@ const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
       // Get the actual heights before animating
       const answerHeight = answerRef.current?.scrollHeight || 0;
       const totalHeight = 60 + 8 + 30 + answerHeight;
-      console.log("answer height:", answerHeight);
-      console.log("total height:", totalHeight);
 
       // Opening animation
       tl.to(buttonRef.current, {
@@ -93,6 +91,7 @@ const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
           answerRef.current,
           {
             height: answerHeight,
+            y: 0,
             opacity: 1,
             duration: 0.75,
             ease: "custom",
@@ -128,6 +127,7 @@ const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
           answerRef.current,
           {
             height: 0,
+            y: 15,
             opacity: 0,
             duration: 0.75,
             ease: "custom",
@@ -143,7 +143,7 @@ const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
     <button
       ref={buttonRef}
       onClick={toggleFAQ}
-      className="faq-item flex h-[60px] w-full flex-col overflow-clip bg-white/5 px-4 transition-colors ease-in-out hover:bg-white/10"
+      className="faq-item flex h-[60px] w-full flex-col overflow-clip bg-white/5 px-4"
     >
       <div className="flex min-h-[60px] w-full items-center justify-between">
         <span className="p-responsive text-left">{faq.question}</span>
@@ -151,7 +151,7 @@ const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
       </div>
       <span
         ref={answerRef}
-        className="p-responsive mt-2 mb-[30px] h-0 max-w-[90%] text-left !leading-[125%] text-white/50 opacity-0"
+        className="p-responsive mt-2 mb-[30px] h-0 max-w-[90%] translate-y-[15px] text-left !leading-[125%] text-white/50 opacity-0"
       >
         {faq.answer}
       </span>
@@ -228,7 +228,7 @@ const FAQSection = () => {
             Your questions, our clear answer
           </h3>
 
-          <div className="tablet:col-span-3 tablet:justify-self-end tablet:items-end tablet:flex-col desktop:col-span-5 tablet:jusity-start col-span-full flex items-center justify-between gap-x-4 gap-y-8">
+          <div className="tablet:col-span-3 tablet:justify-self-end tablet:items-end tablet:flex-col desktop:col-span-5 tablet:jusity-start col-span-full flex flex-col items-start gap-y-4">
             <p className="cta-p-responsive text-white/50">
               Don&apos;t find what you&apos;re looking for?
             </p>
