@@ -27,7 +27,7 @@ const TESTIMONIALS = [
     position: "Founder, FeetStudio",
     profileUrl: "/images/profile.png",
     review:
-      "Mario combines design sensibility with technical precision in a way that's rare to find. He didn't just build our site, he shaped the digital experience around our brand story. The result feels refined, engaging, and truly on point with our identity.",
+      "Mario blends design and development perfectly. He turned our brand story into a refined and engaging digital experience that feels truly authentic.",
     variant: "compact",
   },
   {
@@ -35,31 +35,33 @@ const TESTIMONIALS = [
     position: "Co-Founder, Aetheria",
     profileUrl: "/images/profile.png",
     review:
-      "Collaborating with Mario was seamless from start to finish. He took the time to understand our vision, then translated it into a website that feels both polished and uniquely ours. His attention to detail, creative instincts, and technical knowledge made the entire process effortless. We now have a digital presence that not only looks stunning but also performs exactly the way our business needs.",
+      "Mario quickly understood our vision and built a polished, unique website that fits us perfectly. His attention to detail made the process effortless.",
   },
   {
     username: "Carlos De'Aldi Yunatan",
     position: "Founder, C&A Kupang",
     profileUrl: "/images/profile.png",
     review:
-      "From the very first call, Mario showed a deep understanding of what we wanted to achieve. He guided us with clarity, offered thoughtful suggestions, and then delivered a website that exceeded expectations in every way. The animations and interactions make the experience unforgettable, and the feedback from our audience has been overwhelmingly positive. I'd recommend him without hesitation.",
+      "Mario delivered beyond expectations. His clear guidance and thoughtful touches made our website stand out our audience loves it.",
   },
   {
     username: "Felicia Santoso",
     position: "Marketing Manager, Livenest",
     profileUrl: "/images/profile.png",
     review:
-      "Mario was instrumental in elevating our online presence. He brought structure to our ideas, refined our visual direction, and built a platform that not only looks sleek but functions perfectly. His professionalism and calm, problem-solving attitude made the collaboration a pleasure from start to finish.",
+      "Mario helped shape our ideas into a sleek, functional website. His professionalism and problem-solving made everything smooth and enjoyable.",
     variant: "compact",
   },
 ];
 
 type TestimonialCardProps = (typeof TESTIMONIALS)[0] & {
+  ref: (element: HTMLDivElement | null) => void;
   variant: "default" | "compact";
   idx: number;
 };
 
 const TestimonialCard = ({
+  ref,
   username,
   position,
   profileUrl,
@@ -69,15 +71,18 @@ const TestimonialCard = ({
 }: TestimonialCardProps) => {
   if (variant === "compact") {
     return (
-      <div className="desktop:col-span-6 desktop:gap-y-14 relative col-span-full grid grid-cols-[auto_1fr] grid-rows-[auto_auto] gap-x-12 gap-y-28 bg-white/5 p-6">
+      <div
+        ref={ref}
+        className={`desktop:col-span-6 relative col-span-full grid grid-cols-[auto_1fr] grid-rows-[auto_auto] gap-x-24 gap-y-28 bg-white/5 p-6`}
+      >
         <Image
-          className="h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
+          className="tablet:h-[68px] tablet:w-[68px] h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
           src={profileUrl}
           alt="profile picture"
           width={42}
           height={42}
         />
-        <div className="tablet:text-xs flex flex-col gap-y-1 self-end text-[0.625rem]">
+        <div className="tablet:text-xs desktop:text-sm desktop:gap-y-2 flex flex-col gap-y-1 self-end text-[0.625rem]">
           <span>{username}</span>
           <span className="text-white/50">{position}</span>
         </div>
@@ -88,28 +93,29 @@ const TestimonialCard = ({
           &quot;{review}&quot;
         </p>
 
-        <div className="absolute top-[90px] left-0 h-[1px] w-full bg-white/10" />
-        <div className="absolute top-0 left-[90px] h-full w-[1px] bg-white/10" />
+        <div className="tablet:top-[120px] absolute top-[90px] left-0 h-[1px] w-full bg-white/10" />
+        <div className="tablet:left-[120px] absolute top-0 left-[90px] h-full w-[1px] bg-white/10" />
       </div>
     );
   }
 
   return (
     <div
-      className={`tablet:col-span-4 desktop:col-span-3 desktop:gap-y-8 col-span-full grid grid-cols-2 grid-rows-[auto_auto] gap-y-16 bg-white/5 p-6 ${idx === 0 && "tablet:col-start-5 desktop:col-start-4"}`}
+      ref={ref}
+      className={`tablet:col-span-4 desktop:col-span-3 col-span-full grid grid-cols-2 grid-rows-[auto_auto] gap-y-16 bg-white/5 p-6 ${idx === 0 && "tablet:col-start-5 desktop:col-start-4"} ${idx === 3 && "desktop:order-last"}`}
     >
-      <p className="tablet:text-sm col-span-full text-xs !leading-[125%]">
+      <p className="tablet:text-sm desktop:text-base col-span-full text-xs !leading-[125%]">
         &quot;{review}&quot;
       </p>
       <div className="col-span-full flex items-end gap-x-4">
         <Image
-          className="h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
+          className="tablet:h-[68px] tablet:w-[68px] h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
           src="/images/profile.png"
           alt="profile picture"
           width={42}
           height={42}
         />
-        <div className="tablet:text-xs flex flex-col gap-y-1 self-end text-[0.625rem]">
+        <div className="tablet:text-xs desktop:text-sm desktop:gap-y-2 flex flex-col gap-y-1 self-end text-[0.625rem]">
           <span>{username}</span>
           <span className="text-white/50">{position}</span>
         </div>
@@ -122,10 +128,17 @@ const TestimonialSection = () => {
   const containerRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const totalWorkRef = useRef<HTMLSpanElement[]>([]);
+  const testimonialRef = useRef<HTMLDivElement[]>([]);
 
   const addToTotalWorkRefs = (element: HTMLSpanElement | null) => {
     if (element && !totalWorkRef.current.includes(element)) {
       totalWorkRef.current.push(element);
+    }
+  };
+
+  const addToTestimonialRefs = (element: HTMLDivElement | null) => {
+    if (element && !testimonialRef.current.includes(element)) {
+      testimonialRef.current.push(element);
     }
   };
 
@@ -160,6 +173,15 @@ const TestimonialSection = () => {
               start: "top bottom",
               once: true,
             },
+            duration: 0.75,
+            opacity: 0,
+            ease: "custom",
+          });
+        });
+
+        testimonialRef.current.forEach((el) => {
+          gsap.from(el, {
+            scrollTrigger: el,
             duration: 0.75,
             opacity: 0,
             ease: "custom",
@@ -203,7 +225,7 @@ const TestimonialSection = () => {
 
           {/* Desktop */}
           <CTA
-            text="more case studies"
+            text="get in touch"
             ctaIcon
             className="desktop:flex cta-p-responsive col-span-2 col-end-11 hidden self-end"
           />
@@ -211,13 +233,14 @@ const TestimonialSection = () => {
             ref={addToTotalWorkRefs}
             className={`h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
           >
-            &#91;9&#93;
+            &#91;5&#93;
           </span>
 
           {/* Testimonials */}
-          <div className="custom-grid tablet:gap-y-6 tablet:!gap-x-6 col-span-full !gap-x-4 gap-y-4">
+          <div className="custom-grid col-span-full !gap-x-4 gap-y-4">
             {TESTIMONIALS.map((testimonial, idx) => (
               <TestimonialCard
+                ref={addToTestimonialRefs}
                 key={idx}
                 username={testimonial.username}
                 profileUrl={testimonial.profileUrl}
