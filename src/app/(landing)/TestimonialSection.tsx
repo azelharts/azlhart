@@ -4,13 +4,16 @@ import { useRef } from "react";
 
 import Image from "next/image";
 
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import CustomEase from "gsap/CustomEase";
-import SplitText from "gsap/dist/SplitText";
+import { gsap, useGSAP } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
+import {
+  revealLines,
+  revealFade,
+  revealBatch,
+  revealInstantly,
+} from "@/lib/animations";
 
 import Header from "@/components/Header";
-
 import CTA from "@/components/CTA";
 import { drukWide } from "@/lib/utils";
 
@@ -55,13 +58,11 @@ const TESTIMONIALS = [
 ];
 
 type TestimonialCardProps = (typeof TESTIMONIALS)[0] & {
-  ref: (element: HTMLDivElement | null) => void;
   variant: "default" | "compact";
   idx: number;
 };
 
 const TestimonialCard = ({
-  ref,
   username,
   position,
   profileUrl,
@@ -69,19 +70,21 @@ const TestimonialCard = ({
   variant = "default",
   idx,
 }: TestimonialCardProps) => {
+  const avatar = (
+    <Image
+      className="tablet:h-[68px] tablet:w-[68px] h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
+      src={profileUrl}
+      alt=""
+      width={68}
+      height={68}
+      loading="lazy"
+    />
+  );
+
   if (variant === "compact") {
     return (
-      <div
-        ref={ref}
-        className={`desktop:col-span-6 relative col-span-full grid grid-cols-[auto_1fr] grid-rows-[auto_auto] gap-x-24 gap-y-28 bg-white/5 p-6`}
-      >
-        <Image
-          className="tablet:h-[68px] tablet:w-[68px] h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
-          src={profileUrl}
-          alt="profile picture"
-          width={42}
-          height={42}
-        />
+      <div className="testimonial-card desktop:col-span-6 relative col-span-full grid grid-cols-[auto_1fr] grid-rows-[auto_auto] gap-x-24 gap-y-28 bg-white/5 p-6">
+        {avatar}
         <div className="tablet:text-xs desktop:text-sm desktop:gap-y-2 flex flex-col gap-y-1 self-end text-[0.625rem]">
           <span>{username}</span>
           <span className="text-white/50">{position}</span>
@@ -101,20 +104,13 @@ const TestimonialCard = ({
 
   return (
     <div
-      ref={ref}
-      className={`tablet:col-span-4 desktop:col-span-3 col-span-full grid grid-cols-2 grid-rows-[auto_auto] gap-y-16 bg-white/5 p-6 ${idx === 0 && "tablet:col-start-5 desktop:col-start-4"} ${idx === 3 && "desktop:order-last"}`}
+      className={`testimonial-card tablet:col-span-4 desktop:col-span-3 col-span-full grid grid-cols-2 grid-rows-[auto_auto] gap-y-16 bg-white/5 p-6 ${idx === 0 && "tablet:col-start-5 desktop:col-start-4"} ${idx === 3 && "desktop:order-last"}`}
     >
       <p className="tablet:text-sm desktop:text-base col-span-full text-xs !leading-[125%]">
         &quot;{review}&quot;
       </p>
       <div className="col-span-full flex items-end gap-x-4">
-        <Image
-          className="tablet:h-[68px] tablet:w-[68px] h-[42px] min-h-[42px] w-[42px] min-w-[42px]"
-          src="/images/profile.png"
-          alt="profile picture"
-          width={42}
-          height={42}
-        />
+        {avatar}
         <div className="tablet:text-xs desktop:text-sm desktop:gap-y-2 flex flex-col gap-y-1 self-end text-[0.625rem]">
           <span>{username}</span>
           <span className="text-white/50">{position}</span>
@@ -127,69 +123,32 @@ const TestimonialCard = ({
 const TestimonialSection = () => {
   const containerRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const totalWorkRef = useRef<HTMLSpanElement[]>([]);
-  const testimonialRef = useRef<HTMLDivElement[]>([]);
 
-  const addToTotalWorkRefs = (element: HTMLSpanElement | null) => {
-    if (element && !totalWorkRef.current.includes(element)) {
-      totalWorkRef.current.push(element);
-    }
-  };
-
-  const addToTestimonialRefs = (element: HTMLDivElement | null) => {
-    if (element && !testimonialRef.current.includes(element)) {
-      testimonialRef.current.push(element);
-    }
-  };
+  const fontsReady = useFontsReady();
 
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      if (!fontsReady) return;
 
-      document.fonts.ready.then(() => {
-        SplitText.create(headingRef.current, {
-          type: "lines",
-          autoSplit: true,
-          mask: "lines",
-          onSplit: (self) => {
-            return gsap.from(self.lines, {
-              scrollTrigger: {
-                trigger: headingRef.current,
-                start: "top bottom",
-                once: true,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: "custom",
-            });
-          },
-        });
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later. That matters here — `.work-count` exists in both this section
+      // and the other one, so an unscoped lookup animates both.
+      const mm = gsap.matchMedia(containerRef);
 
-        totalWorkRef.current.forEach((el) => {
-          gsap.from(el, {
-            scrollTrigger: {
-              trigger: el,
-              start: "top bottom",
-              once: true,
-            },
-            duration: 0.75,
-            opacity: 0,
-            ease: "custom",
-          });
-        });
+      mm.add("(prefers-reduced-motion: reduce)", () =>
+        revealInstantly([".testimonial-card", ".work-count"]),
+      );
 
-        testimonialRef.current.forEach((el) => {
-          gsap.from(el, {
-            scrollTrigger: el,
-            duration: 0.75,
-            opacity: 0,
-            ease: "custom",
-          });
-        });
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        revealLines(headingRef.current);
+        revealFade(".work-count");
+        // Batched: the cards sit in a grid, so several cross the threshold at
+        // once. One coalesced tween beats five independent ScrollTriggers.
+        revealBatch(".testimonial-card");
       });
     },
-    { scope: containerRef },
+    { dependencies: [fontsReady], scope: containerRef, revertOnUpdate: true },
   );
 
   return (
@@ -215,10 +174,7 @@ const TestimonialSection = () => {
               ctaIcon
               className="tablet:translate-y-0 cta-p-responsive translate-y-2"
             />
-            <span
-              ref={addToTotalWorkRefs}
-              className={`h3-responsive ${drukWide.className}`}
-            >
+            <span className={`work-count h3-responsive ${drukWide.className}`}>
               &#91;5&#93;
             </span>
           </div>
@@ -230,8 +186,7 @@ const TestimonialSection = () => {
             className="desktop:flex cta-p-responsive col-span-2 col-end-11 hidden self-end"
           />
           <span
-            ref={addToTotalWorkRefs}
-            className={`h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
+            className={`work-count h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
           >
             &#91;5&#93;
           </span>
@@ -240,8 +195,7 @@ const TestimonialSection = () => {
           <div className="custom-grid col-span-full !gap-x-4 gap-y-4">
             {TESTIMONIALS.map((testimonial, idx) => (
               <TestimonialCard
-                ref={addToTestimonialRefs}
-                key={idx}
+                key={testimonial.username}
                 username={testimonial.username}
                 profileUrl={testimonial.profileUrl}
                 position={testimonial.position}

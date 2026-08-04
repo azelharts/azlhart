@@ -4,59 +4,41 @@ import { useRef } from "react";
 
 import Image from "next/image";
 
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import SplitText from "gsap/dist/SplitText";
-import CustomEase from "gsap/dist/CustomEase";
+import { gsap, useGSAP } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
+import { revealLines, revealWipe, revealInstantly } from "@/lib/animations";
 
 import Header from "@/components/Header";
 import CTA from "@/components/CTA";
 
 const AboutSection = () => {
   const aboutRef = useRef<HTMLElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
   const firstParagraph = useRef<HTMLParagraphElement>(null);
   const secondParagraph = useRef<HTMLParagraphElement>(null);
 
+  const fontsReady = useFontsReady();
+
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      if (!fontsReady) return;
 
-      document.fonts.ready.then(() => {
-        [firstParagraph, secondParagraph].map((el) =>
-          SplitText.create(el.current, {
-            type: "lines",
-            autoSplit: true,
-            mask: "lines",
-            onSplit: (self) => {
-              return gsap.from(self.lines, {
-                scrollTrigger: {
-                  trigger: el.current,
-                  start: "top bottom",
-                  once: true,
-                },
-                y: "100%",
-                stagger: 0.075,
-                ease: "custom",
-              });
-            },
-          }),
-        );
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later — without this they'd resolve against the whole document.
+      const mm = gsap.matchMedia(aboutRef);
 
-        gsap.from(imageRef.current, {
-          scrollTrigger: {
-            trigger: imageRef.current,
-            start: "top bottom",
-            once: true,
-          },
-          clipPath: "inset(0% 0% 100% 0%)",
-          duration: 0.75,
-          ease: "custom",
-        });
+      mm.add("(prefers-reduced-motion: reduce)", () =>
+        revealInstantly([".about-p", ".about-image"]),
+      );
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        revealLines(firstParagraph.current);
+        revealLines(secondParagraph.current);
+        revealWipe(imageRef.current);
       });
     },
-    { scope: aboutRef },
+    { dependencies: [fontsReady], scope: aboutRef, revertOnUpdate: true },
   );
 
   return (
@@ -70,13 +52,18 @@ const AboutSection = () => {
         />
 
         <div className="custom-grid tablet:gap-y-6 desktop:gap-y-16 h-fit gap-y-16 py-16">
-          <div className="tablet:col-start-4 tablet:h-[250px] desktop:col-start-7 tablet:block relative col-span-2 hidden h-[115px]">
+          {/* The wipe animates this wrapper, not the <img> — next/image
+              overwrites inline styles on the element it renders. */}
+          <div
+            ref={imageRef}
+            className="about-image tablet:col-start-4 tablet:h-[250px] desktop:col-start-7 tablet:block relative col-span-2 hidden h-[115px]"
+          >
             <Image
-              ref={imageRef}
               src="/images/landing-1.jpg"
               alt=""
               fill
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              loading="lazy"
+              sizes="(max-width: 833px) 50vw, (max-width: 1255px) 25vw, 17vw"
               className="object-cover"
             />
           </div>

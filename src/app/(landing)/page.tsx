@@ -14,9 +14,7 @@ const Home = () => {
       <AboutSection />
       <ServiceSection />
       <WorkSection />
-      <div className="h-[800vh]">
-        <ProcessSection />
-      </div>
+      <ProcessSection />
       <FAQSection />
       <FrameSection />
       <TestimonialSection />

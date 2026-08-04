@@ -4,10 +4,9 @@ import { useRef } from "react";
 
 import Image from "next/image";
 
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import SplitText from "gsap/dist/SplitText";
-import CustomEase from "gsap/CustomEase";
+import { gsap, useGSAP } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
+import { revealLines, revealFade, revealInstantly } from "@/lib/animations";
 
 import Header from "@/components/Header";
 import CTA from "@/components/CTA";
@@ -38,53 +37,29 @@ const featuredWorks = [
 const WorkSection = () => {
   const workRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const totalWorkRef = useRef<HTMLSpanElement[]>([]);
 
-  const addToTotalWorkRefs = (element: HTMLSpanElement | null) => {
-    if (element && !totalWorkRef.current.includes(element)) {
-      totalWorkRef.current.push(element);
-    }
-  };
+  const fontsReady = useFontsReady();
 
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      if (!fontsReady) return;
 
-      document.fonts.ready.then(() => {
-        SplitText.create(headingRef.current, {
-          type: "lines",
-          autoSplit: true,
-          mask: "lines",
-          onSplit: (self) => {
-            return gsap.from(self.lines, {
-              scrollTrigger: {
-                trigger: headingRef.current,
-                start: "top bottom",
-                once: true,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: "custom",
-            });
-          },
-        });
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later. That matters here — `.work-count` exists in both this section
+      // and the other one, so an unscoped lookup animates both.
+      const mm = gsap.matchMedia(workRef);
 
-        totalWorkRef.current.forEach((el) => {
-          gsap.from(el, {
-            scrollTrigger: {
-              trigger: el,
-              start: "top bottom",
-              once: true,
-            },
-            duration: 0.75,
-            opacity: 0,
-            ease: "custom",
-          });
-        });
+      mm.add("(prefers-reduced-motion: reduce)", () =>
+        revealInstantly([".work-count"]),
+      );
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        revealLines(headingRef.current);
+        revealFade(".work-count");
       });
     },
-    { scope: workRef },
+    { dependencies: [fontsReady], scope: workRef, revertOnUpdate: true },
   );
 
   return (
@@ -111,10 +86,7 @@ const WorkSection = () => {
               ctaIcon
               className="tablet:translate-y-0 cta-p-responsive translate-y-2"
             />
-            <span
-              ref={addToTotalWorkRefs}
-              className={`h3-responsive ${drukWide.className}`}
-            >
+            <span className={`work-count h3-responsive ${drukWide.className}`}>
               &#91;9&#93;
             </span>
           </div>
@@ -126,8 +98,7 @@ const WorkSection = () => {
             className="desktop:flex cta-p-responsive col-span-2 col-end-11 hidden self-end"
           />
           <span
-            ref={addToTotalWorkRefs}
-            className={`h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
+            className={`work-count h3-responsive desktop:block col-end-13 hidden self-end justify-self-end ${drukWide.className}`}
           >
             &#91;9&#93;
           </span>
@@ -143,8 +114,13 @@ const WorkSection = () => {
                   alt={`${work.workTitle} work thumbnail`}
                   width={1920}
                   height={1080}
+                  loading="lazy"
+                  sizes="100vw"
                   className="h-[160%] w-[100%] object-cover brightness-50"
+                  // ScrollSmoother parallax. It transforms this element on
+                  // every scroll frame, so keep it promoted for the duration.
                   data-speed="auto"
+                  style={{ willChange: "transform" }}
                 />
                 <span className="p-responsive absolute-center-y left-4 uppercase">
                   {work.workType}

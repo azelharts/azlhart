@@ -1,4 +1,4 @@
-import { RefObject } from "react";
+import { ReactNode } from "react";
 
 declare global {
   interface BaseProps {

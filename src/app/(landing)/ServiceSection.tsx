@@ -1,13 +1,17 @@
 "use client";
 
-import { RefObject, useRef } from "react";
+import { useRef } from "react";
 
 import Image from "next/image";
 
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
-import SplitText from "gsap/dist/SplitText";
-import CustomEase from "gsap/CustomEase";
+import { gsap, useGSAP } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
+import {
+  revealLines,
+  revealFade,
+  revealWipe,
+  revealInstantly,
+} from "@/lib/animations";
 
 import Header from "@/components/Header";
 
@@ -36,82 +40,43 @@ const services = [
 
 const ServiceSection = () => {
   const serviceRef = useRef<HTMLElement>(null);
-  const serviceNumberAndTitleRefs = useRef<
-    (HTMLSpanElement | HTMLHeadingElement)[]
-  >([]);
-  const serviceDescriptionRefs = useRef<HTMLParagraphElement[]>([]);
-  const serviceImageRefs = useRef<HTMLDivElement[]>([]);
 
-  const addToRefs = <T extends HTMLElement>(refsArray: RefObject<T[]>) => {
-    return (el: T | null) => {
-      if (el && !refsArray.current.includes(el)) {
-        refsArray.current.push(el);
-      }
-    };
-  };
-
-  // Reusable animation config
-  const scrollTriggerConfig = {
-    start: "top bottom",
-    once: true,
-  };
+  const fontsReady = useFontsReady();
 
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      if (!fontsReady) return;
 
-      document.fonts.ready.then(() => {
-        serviceDescriptionRefs.current.forEach((el) => {
-          SplitText.create(el, {
-            type: "lines",
-            autoSplit: true,
-            mask: "lines",
-            onSplit: (self) => {
-              gsap.from(self.lines, {
-                scrollTrigger: {
-                  trigger: el,
-                  ...scrollTriggerConfig,
-                },
-                y: "100%",
-                stagger: 0.075,
-                ease: "custom",
-              });
-            },
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later. That matters here — `.work-count` exists in both this section
+      // and the other one, so an unscoped lookup animates both.
+      const mm = gsap.matchMedia(serviceRef);
+
+      mm.add("(prefers-reduced-motion: reduce)", () =>
+        revealInstantly([
+          ".service-description",
+          ".service-heading",
+          ".service-image",
+        ]),
+      );
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        // Selectors are safe here: useGSAP's `scope` confines every lookup to
+        // this section, so `.service-image` can't reach into another component.
+        gsap.utils
+          .toArray<HTMLElement>(".service-description")
+          .forEach((el) => {
+            revealLines(el);
           });
-        });
 
-        for (let i = 0; i < serviceNumberAndTitleRefs.current.length; i += 2) {
-          const numberAndTitle = [
-            serviceNumberAndTitleRefs.current[i],
-            serviceNumberAndTitleRefs.current[i + 1],
-          ];
-
-          gsap.from(numberAndTitle, {
-            scrollTrigger: {
-              trigger: numberAndTitle[0],
-              ...scrollTriggerConfig,
-            },
-            duration: 0.75,
-            opacity: 0,
-            ease: "custom",
-          });
-        }
-
-        serviceImageRefs.current.forEach((el) => {
-          gsap.from(el, {
-            scrollTrigger: {
-              trigger: el,
-              ...scrollTriggerConfig,
-            },
-            clipPath: "inset(0% 0% 100% 0%)",
-            duration: 0.75,
-            ease: "custom",
-          });
+        services.forEach((_, idx) => {
+          revealFade(`.service-heading-${idx}`);
+          revealWipe(`.service-image-${idx}`);
         });
       });
     },
-    { scope: serviceRef },
+    { dependencies: [fontsReady], scope: serviceRef, revertOnUpdate: true },
   );
 
   return (
@@ -126,36 +91,31 @@ const ServiceSection = () => {
               className="custom-grid tablet:gap-y-12 col-span-full gap-y-8"
             >
               <span
-                ref={addToRefs(serviceNumberAndTitleRefs)}
-                className="p-responsive order-1 col-start-1 self-start text-white/50"
+                className={`service-heading service-heading-${idx} p-responsive order-1 col-start-1 self-start text-white/50`}
               >
                 &#91;0{idx + 1}&#93;
               </span>
 
               <h3
-                ref={addToRefs(serviceNumberAndTitleRefs)}
-                className={`h3-responsive tablet:justify-self-start desktop:col-span-5 tablet:text-start order-2 col-span-3 col-start-2 self-start justify-self-end text-end ${drukWide.className}`}
+                className={`service-heading service-heading-${idx} h3-responsive tablet:justify-self-start desktop:col-span-5 tablet:text-start order-2 col-span-3 col-start-2 self-start justify-self-end text-end ${drukWide.className}`}
               >
                 {service.serviceTitle.toUpperCase()}
               </h3>
 
               <div
-                ref={addToRefs(serviceImageRefs)}
-                className="tablet:order-4 tablet:col-start-5 desktop:col-span-6 desktop:col-start-7 desktop:h-[440px] relative order-3 col-span-4 h-[345px]"
+                className={`service-image service-image-${idx} tablet:order-4 tablet:col-start-5 desktop:col-span-6 desktop:col-start-7 desktop:h-[440px] relative order-3 col-span-4 h-[345px]`}
               >
                 <Image
                   src={service.imageSrc}
                   alt={`${service.serviceTitle} service image`}
                   fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  loading="lazy"
+                  sizes="(max-width: 833px) 100vw, (max-width: 1255px) 50vw, 50vw"
                   className="object-cover"
                 />
               </div>
 
-              <p
-                ref={addToRefs(serviceDescriptionRefs)}
-                className="p-service-responsive tablet:order-3 tablet:col-span-4 desktop:col-span-6 order-4 col-span-full !leading-[125%] text-white/50"
-              >
+              <p className="service-description p-service-responsive tablet:order-3 tablet:col-span-4 desktop:col-span-6 order-4 col-span-full !leading-[125%] text-white/50">
                 <span className="tablet:inline-block desktop:w-[100px] hidden w-[50px]" />
                 {service.serviceDescription}
               </p>

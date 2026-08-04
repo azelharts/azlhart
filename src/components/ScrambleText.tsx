@@ -1,49 +1,36 @@
 "use client";
+
 import { useRef } from "react";
 
-import gsap from "gsap";
-import { useGSAP } from "@gsap/react";
+import { gsap, useGSAP } from "@/lib/gsap";
 
-import ScrambleTextPlugin from "gsap/dist/ScrambleTextPlugin";
-
+/**
+ * There are a dozen of these on the page. The previous version ran a
+ * `useGSAP` per instance purely to call `gsap.registerPlugin` — which is
+ * global, idempotent, and now happens once in `@/lib/gsap`. `contextSafe` is
+ * still needed so the hover tweens are captured for cleanup.
+ */
 const ScrambleText = ({ text }: { text: string }) => {
-  const textRef = useRef<HTMLElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
 
-  const { contextSafe } = useGSAP(
-    () => {
-      gsap.registerPlugin(ScrambleTextPlugin);
-    },
-    { scope: textRef },
-  );
+  const { contextSafe } = useGSAP({ scope: textRef });
 
-  const hoverIn = contextSafe(() => {
-    gsap.to(textRef.current, {
-      duration: 0.45,
-      scrambleText: {
-        text: text,
-        chars: text,
-        speed: 0.125,
-        tweenLength: false,
-      },
-    });
-  });
-
-  const hoverOut = contextSafe(() => {
-    gsap.to(textRef.current, {
-      duration: 0.45,
-      scrambleText: {
-        text: text,
-        chars: text,
-        speed: 1,
-        tweenLength: false,
-      },
-    });
-  });
+  const scramble = (speed: number) =>
+    contextSafe(() => {
+      gsap.to(textRef.current, {
+        duration: 0.45,
+        ease: "none",
+        // overwrite so a fast in-out-in doesn't leave two scrambles racing
+        // over the same text node.
+        overwrite: true,
+        scrambleText: { text, chars: text, speed, tweenLength: false },
+      });
+    })();
 
   return (
     <span
-      onMouseEnter={hoverIn}
-      onMouseLeave={hoverOut}
+      onMouseEnter={() => scramble(0.125)}
+      onMouseLeave={() => scramble(1)}
       ref={textRef}
       className="font-bold text-nowrap"
     >

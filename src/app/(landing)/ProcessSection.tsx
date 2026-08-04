@@ -4,17 +4,11 @@ import { useRef } from "react";
 
 import Image from "next/image";
 
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import CustomEase from "gsap/CustomEase";
-import SplitText from "gsap/dist/SplitText";
+import { gsap, useGSAP, SplitText } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
 
 import { drukWide } from "@/lib/utils";
 
-// Constants
-const SCROLL_THRESHOLDS = [0.25, 0.5, 0.75];
-const ANIMATION_DURATION = 0.75;
-const EASE = "custom";
 const PROCESSES = [
   {
     id: 1,
@@ -66,390 +60,330 @@ const PROCESSES = [
   },
 ];
 
-const animateElements = (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  animations: Array<{ target: string; [key: string]: any }>,
-) => {
-  animations.forEach(({ target, ...props }) => {
-    gsap.to(target, {
-      duration: ANIMATION_DURATION,
-      ease: EASE,
-      ...props,
-    });
-  });
-};
+const PROGRESS_BARS = 20;
+
+/** Timeline units: each step holds for STEP, and hands over across TRANSITION. */
+const STEP = 1;
+const TRANSITION = 0.75;
+const TOTAL = PROCESSES.length * STEP;
+
+/**
+ * Height of the scroll runway behind the sticky panel — this is what gives the
+ * section its scroll duration. Four steps over five viewports.
+ */
+const RUNWAY_VH = 500;
+
+const HIDDEN_CLIP = "inset(0% 0% 100% 0%)";
+const SHOWN_CLIP = "inset(0% 0% 0% 0%)";
+
+/**
+ * Renders one image column; every step's image is stacked in place and wiped in
+ * turn. Declared at module scope, not inside ProcessSection — a component
+ * defined during render is a new type on every render, which would unmount and
+ * refetch all twelve images.
+ */
+const ImageStack = ({
+  slot,
+  heightClass,
+  sizes,
+  labelClass,
+}: {
+  slot: number;
+  heightClass: string;
+  sizes: string;
+  labelClass?: string;
+}) => (
+  <>
+    <div className={`relative w-full ${heightClass}`}>
+      {PROCESSES.map((process, idx) => (
+        <Image
+          key={process.id}
+          src={process.images[slot].src}
+          fill
+          alt=""
+          loading="lazy"
+          sizes={sizes}
+          className={`process_images_${idx} object-cover`}
+          style={{ clipPath: idx === 0 ? SHOWN_CLIP : HIDDEN_CLIP }}
+        />
+      ))}
+    </div>
+    {labelClass !== undefined && (
+      <div className="relative">
+        {PROCESSES.map((process, idx) => (
+          <span
+            key={process.id}
+            className={`process_images_label_${idx} absolute top-0 left-0 text-sm text-white capitalize ${labelClass} ${
+              idx > 0 ? "opacity-0" : ""
+            }`}
+          >
+            {process.images[slot].label}
+          </span>
+        ))}
+      </div>
+    )}
+  </>
+);
 
 const ProcessSection = () => {
+  const runwayRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLElement>(null);
+
+  const fontsReady = useFontsReady();
 
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create(EASE, "M0,0 C0.82,0.08 0.29,1 1,1");
+      // Hide every step but the first straight away — before the browser
+      // paints, and before the fonts gate below. Otherwise all four titles and
+      // numbers stack on top of each other until the webfonts resolve.
+      PROCESSES.slice(1).forEach((p) => {
+        gsap.set(`#process_number_${p.id}`, { autoAlpha: 0 });
+        gsap.set(`#process_title_${p.id}`, { yPercent: 100 });
+      });
 
-      document.fonts.ready.then(() => {
-        const bars = gsap.utils.toArray(".process_progress") as HTMLElement[];
-        const scrollFlags = [false, false, false];
+      if (!fontsReady) return;
 
-        // Create SplitText instances for all descriptions
-        const splitInstances = PROCESSES.map((process) => {
-          return SplitText.create(`#process_description_${process.id}`, {
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later — without this they'd resolve against the whole document.
+      const mm = gsap.matchMedia(containerRef);
+
+      // No pinning, no scrub — show the first step and let the section scroll
+      // past normally. A 7-viewport pinned scroll-jack is precisely the kind of
+      // thing prefers-reduced-motion exists to opt out of.
+      mm.add("(prefers-reduced-motion: reduce)", () => {
+        // Collapse the runway too, otherwise it leaves five viewports of dead
+        // scroll behind a panel that no longer animates.
+        gsap.set(runwayRef.current, { height: "auto" });
+        gsap.set(".process_images_0", { clipPath: SHOWN_CLIP });
+        gsap.set("#process_number_1, #process_title_1", { autoAlpha: 1, y: 0 });
+        gsap.set(".process_progress", { opacity: 1 });
+      });
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const splits = PROCESSES.map((p) =>
+          SplitText.create(`#process_description_${p.id}`, {
             type: "lines",
             mask: "lines",
-            autoSplit: true,
-          });
-        });
-
-        gsap.set(
-          [
-            splitInstances[1].lines,
-            splitInstances[2].lines,
-            splitInstances[3].lines,
-          ],
-          { y: "100%" },
+          }),
         );
 
-        // Main timeline
+        // Explicit start state for every step but the first. Previously this
+        // lived half in Tailwind classes and half in inline styles, which made
+        // the timeline's reverse direction land on different values than the
+        // forward one.
+        splits.slice(1).forEach((s) => gsap.set(s.lines, { yPercent: 100 }));
+        gsap.set(".process_images_0", { clipPath: SHOWN_CLIP });
+
+        /**
+         * Steps hand over as discrete animations fired when scroll crosses a
+         * threshold — they play at their own speed rather than being scrubbed
+         * by the scrollbar. Only the progress bars are tied to scroll position.
+         */
+        const step = (from: number, to: number) => {
+          const dir = to > from ? 1 : -1;
+
+          // Outgoing lines exit the way the user is travelling; incoming lines
+          // arrive from the opposite edge.
+          gsap.to(splits[from].lines, {
+            yPercent: -100 * dir,
+            stagger: 0.075,
+            duration: TRANSITION,
+          });
+          gsap.to(splits[to].lines, {
+            yPercent: 0,
+            stagger: 0.075,
+            duration: TRANSITION,
+          });
+
+          gsap.to(`#process_number_${PROCESSES[from].id}`, {
+            autoAlpha: 0,
+            duration: TRANSITION,
+          });
+          gsap.to(`#process_number_${PROCESSES[to].id}`, {
+            autoAlpha: 1,
+            duration: TRANSITION,
+          });
+
+          gsap.to(`#process_title_${PROCESSES[from].id}`, {
+            yPercent: -100 * dir,
+            duration: TRANSITION,
+          });
+          gsap.to(`#process_title_${PROCESSES[to].id}`, {
+            yPercent: 0,
+            duration: TRANSITION,
+          });
+
+          gsap.to(`.process_images_${from}`, {
+            clipPath: HIDDEN_CLIP,
+            duration: TRANSITION,
+          });
+          gsap.to(`.process_images_${to}`, {
+            clipPath: SHOWN_CLIP,
+            stagger: 0.075,
+            duration: TRANSITION,
+          });
+
+          gsap.to(`.process_images_label_${from}`, {
+            autoAlpha: 0,
+            duration: TRANSITION,
+          });
+          gsap.to(`.process_images_label_${to}`, {
+            autoAlpha: 1,
+            duration: TRANSITION,
+          });
+        };
+
+        let active = 0;
+
         const tl = gsap.timeline({
           scrollTrigger: {
-            trigger: containerRef.current,
+            // The runway <div> supplies the scroll distance and the panel is
+            // pinned inside it with pinSpacing off.
+            //
+            // ScrollTrigger's automatic pin spacing does not work in this app —
+            // it writes `padding: 0` onto its pin-spacer instead of reserving
+            // the pinned distance, so everything below the section gets laid
+            // out inside the pinned range. Before this fix the page hit maximum
+            // scroll with the panel still stuck on step four and the FAQ,
+            // frame and testimonial sections were unreachable. (The original
+            // code papered over the same problem with a hand-written
+            // `h-[800vh]` wrapper in page.tsx.) CSS `position: sticky` is not
+            // an alternative here: it has no effect inside ScrollSmoother's
+            // transformed #smooth-content, which blanks the panel entirely.
+            trigger: runwayRef.current,
             start: "top top",
-            end: "+=700%",
-            pin: true,
+            end: "bottom bottom",
+            pin: containerRef.current,
+            pinSpacing: false,
             scrub: true,
+            invalidateOnRefresh: true,
             onUpdate: (self) => {
-              SCROLL_THRESHOLDS.forEach((threshold, index) => {
-                const current = index + 1;
-                const next = current + 1;
+              // Derive the active step from progress instead of tracking a
+              // parallel array of booleans. Same thresholds, but a fast flick
+              // that jumps two steps at once can't desync the state.
+              const next = Math.min(
+                PROCESSES.length - 1,
+                Math.floor(self.progress / (1 / PROCESSES.length)),
+              );
 
-                // Scroll Down
-                if (self.progress >= threshold && !scrollFlags[index]) {
-                  // Reset next description lines
-                  gsap.to(splitInstances[current - 1].lines, {
-                    y: "-100%",
-                    stagger: 0.075,
-                    ease: EASE,
-                  });
-
-                  // Animate next description lines
-                  gsap.to(splitInstances[current].lines, {
-                    y: "0%",
-                    stagger: 0.075,
-                    ease: EASE,
-                  });
-
-                  animateElements([
-                    // Numbers
-                    { target: `#process_number_${current}`, opacity: 0 },
-                    { target: `#process_number_${next}`, opacity: 1 },
-
-                    // Titles
-                    { target: `#process_title_${current}`, y: "-100%" },
-                    { target: `#process_title_${next}`, y: 0 },
-
-                    // Images
-                    {
-                      target: `.process_images_${current - 1}`,
-                    },
-                    {
-                      target: `.process_images_${current}`,
-                      clipPath: "inset(0% 0% 0% 0%)",
-                      stagger: "0.075",
-                    },
-
-                    // Image Labels
-                    {
-                      target: `.process_images_label_${current - 1}`,
-                      opacity: 0,
-                    },
-                    {
-                      target: `.process_images_label_${current}`,
-                      opacity: 1,
-                    },
-                  ]);
-                  scrollFlags[index] = true;
-                }
-
-                // Scroll Up
-                if (self.progress <= threshold && scrollFlags[index]) {
-                  gsap.to(splitInstances[current - 1].lines, {
-                    y: "0",
-                    stagger: 0.075,
-                    ease: EASE,
-                  });
-
-                  // Animate next description lines
-                  gsap.to(splitInstances[current].lines, {
-                    y: "100%",
-                    stagger: 0.075,
-                    ease: EASE,
-                  });
-
-                  animateElements([
-                    // Numbers
-                    { target: `#process_number_${current}`, opacity: 1 },
-                    { target: `#process_number_${next}`, opacity: 0 },
-
-                    // Titles
-                    { target: `#process_title_${current}`, y: 0 },
-                    { target: `#process_title_${next}`, y: "100%" },
-
-                    // Images
-                    {
-                      target: `.process_images_${current}`,
-                      clipPath: "inset(0% 0% 100% 0%)",
-                      stagger: 0.075,
-                    },
-                    {
-                      target: `.process_images_${next}`,
-                    },
-
-                    // Image Labels
-                    {
-                      target: `.process_images_label_${current - 1}`,
-                      opacity: 1,
-                    },
-                    {
-                      target: `.process_images_label_${current}`,
-                      opacity: 0,
-                    },
-                  ]);
-                  scrollFlags[index] = false;
-                }
-              });
+              if (next === active) return;
+              step(active, next);
+              active = next;
             },
           },
         });
 
-        // Animate progress bars
-        bars.forEach((bar, i) => {
-          tl.to(bar, { opacity: 1, duration: 5 }, i * 5);
-        });
+        // Progress bars are the one thing tied to scroll position.
+        tl.to(
+          ".process_progress",
+          {
+            opacity: 1,
+            duration: TOTAL / PROGRESS_BARS,
+            stagger: { amount: TOTAL - TOTAL / PROGRESS_BARS },
+          },
+          0,
+        );
 
-        // Initial animations
-        PROCESSES.forEach((process, index) => {
-          const isFirst = index === 0;
-
-          // Split text animation for first description only
-          if (isFirst) {
-            gsap.from(splitInstances[0].lines, {
-              scrollTrigger: {
-                trigger: `#process_description_${process.id}`,
-                start: "top bottom",
-                once: true,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: EASE,
-            });
-
-            gsap.from(
-              [`#process_number_${process.id}`, `#process_title_${process.id}`],
-              {
-                scrollTrigger: `#process_number_${process.id}`,
-                opacity: 0,
-                duration: ANIMATION_DURATION,
-                ease: EASE,
-              },
-            );
-
-            gsap.from(".process_image", {
-              scrollTrigger: ".process_image",
-              clipPath: "inset(0% 0% 100% 0%)",
-              stagger: 0.075,
-              ease: EASE,
-            });
-
-            gsap.from(".process_images_label_0", {
-              scrollTrigger: ".process_images_label_0",
-              opacity: 0,
-              stagger: 0.075,
-              ease: EASE,
-            });
-          }
-        });
+        return () => splits.forEach((s) => s.revert());
       });
     },
-    { scope: containerRef },
+    { dependencies: [fontsReady], scope: containerRef, revertOnUpdate: true },
   );
 
   return (
-    <section
-      className="sticky top-0 flex h-[100vh] flex-col"
-      ref={containerRef}
-    >
-      {/* Container */}
-      <div className="max-w-container px-container desktop:!pb-0 relative z-10 mx-auto h-full w-full">
-        <div className="custom-grid desktop:grid-rows-[auto_auto_auto] h-full gap-x-4 gap-y-12 py-16">
-          {/* Process Numbers */}
-          <div className="tablet:col-start-3 desktop:col-start-5 tablet:h-[32px] desktop:h-[44px] relative col-start-1 h-[22px] self-center">
-            {PROCESSES.map((process, index) => (
-              <span
-                key={process.id}
-                id={`process_number_${process.id}`}
-                className={`p-responsive absolute top-0 left-0 text-white/50 ${
-                  index > 0 ? "opacity-0" : ""
-                }`}
-              >
-                {process.number}
-              </span>
-            ))}
-          </div>
+    <div ref={runwayRef} style={{ height: `${RUNWAY_VH}vh` }}>
+      <section className="flex h-[100svh] flex-col" ref={containerRef}>
+        {/* Container */}
+        <div className="max-w-container px-container desktop:!pb-0 relative z-10 mx-auto h-full w-full">
+          <div className="custom-grid desktop:grid-rows-[auto_auto_auto] h-full gap-x-4 gap-y-12 py-16">
+            {/* Process Numbers */}
+            <div className="tablet:col-start-3 desktop:col-start-5 tablet:h-[32px] desktop:h-[44px] relative col-start-1 h-[22px] self-center">
+              {PROCESSES.map((process) => (
+                <span
+                  key={process.id}
+                  id={`process_number_${process.id}`}
+                  className="p-responsive absolute top-0 left-0 text-white/50"
+                >
+                  {process.number}
+                </span>
+              ))}
+            </div>
 
-          {/* Process Titles */}
-          <div className="tablet:col-end-9 tablet:justify-self-start tablet:col-span-4 desktop:col-end-13 desktop:col-start-7 desktop:h-[44px] tablet:h-[32px] relative col-span-3 col-end-5 h-[22px] w-full self-center justify-self-end overflow-hidden">
-            {PROCESSES.map((process, index) => (
-              <h3
-                key={process.id}
-                id={`process_title_${process.id}`}
-                className={`h3-responsive tablet:left-0 absolute top-0 right-0 ${
-                  index > 0 && "translate-y-full"
-                } ${drukWide.className}`}
-              >
-                {process.title}
-              </h3>
-            ))}
-          </div>
+            {/* Process Titles */}
+            <div className="tablet:col-end-9 tablet:justify-self-start tablet:col-span-4 desktop:col-end-13 desktop:col-start-7 desktop:h-[44px] tablet:h-[32px] relative col-span-3 col-end-5 h-[22px] w-full self-center justify-self-end overflow-hidden">
+              {PROCESSES.map((process) => (
+                <h3
+                  key={process.id}
+                  id={`process_title_${process.id}`}
+                  // No `translate-y-full` on the inactive steps: Tailwind writes
+                  // the `translate` property, GSAP writes `transform`, and the
+                  // two compose rather than override. Inactive titles ended up
+                  // displaced 200%, and once GSAP moved the outgoing title to
+                  // -100% Tailwind's +100% cancelled it straight back into
+                  // view — so every step rendered the *previous* step's title.
+                  // The start state is set in the effect above instead.
+                  className={`h3-responsive tablet:left-0 absolute top-0 right-0 ${drukWide.className}`}
+                >
+                  {process.title}
+                </h3>
+              ))}
+            </div>
 
-          {/* Progress Bar */}
-          <div className="tablet:col-span-6 tablet:col-start-3 desktop:col-start-1 desktop:row-start-3 desktop:self-start col-span-4 flex justify-between">
-            {new Array(20).fill(null).map((_, idx) => (
-              <div
-                key={idx}
-                className="tablet-[h-[30px]] process_progress h-5 w-[2px] bg-white opacity-25"
+            {/* Progress Bar */}
+            <div className="tablet:col-span-6 tablet:col-start-3 desktop:col-start-1 desktop:row-start-3 desktop:self-start col-span-4 flex justify-between">
+              {Array.from({ length: PROGRESS_BARS }, (_, idx) => (
+                <div
+                  key={idx}
+                  className="process_progress h-5 w-[2px] bg-white opacity-25"
+                />
+              ))}
+            </div>
+
+            {/* Image column 1 */}
+            <div className="tablet:col-span-5 desktop:col-span-3 relative col-span-4 flex h-full flex-col gap-y-4">
+              <ImageStack
+                slot={0}
+                heightClass="tablet:h-[300px] h-[160px]"
+                sizes="(max-width: 833px) 100vw, (max-width: 1255px) 60vw, 25vw"
+                labelClass="tablet:inline hidden"
               />
-            ))}
-          </div>
-
-          {/* <div className="desktop:block col-span-6 hidden" /> */}
-
-          {/* Image 1 */}
-          <div className="tablet:col-span-5 desktop:col-span-3 relative col-span-4 flex h-full flex-col gap-y-4">
-            <div className="tablet:h-[300px] relative h-[160px] w-full">
-              {PROCESSES.map((process, idx) => (
-                <Image
-                  key={idx}
-                  src={process.images[0].src}
-                  fill
-                  alt=""
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className={`object-cover ${
-                    idx === 0
-                      ? "process_image"
-                      : idx === 1
-                        ? "process_images_1"
-                        : idx === 2
-                          ? "process_images_2"
-                          : "process_images_3"
-                  }`}
-                  style={idx !== 0 ? { clipPath: "inset(0% 0% 100% 0%)" } : {}}
-                />
-              ))}
             </div>
-            <div className="relative">
-              {PROCESSES.map((process, idx) => (
-                <span
-                  key={idx}
-                  className={`tablet:inline absolute top-0 left-0 hidden text-sm text-white capitalize ${
-                    idx > 0 ? "opacity-0" : ""
-                  } ${
-                    idx === 0
-                      ? "process_images_label_0"
-                      : idx === 1
-                        ? "process_images_label_1"
-                        : idx === 2
-                          ? "process_images_label_2"
-                          : "process_images_label_3"
-                  }`}
+
+            {/* Image column 2 — tablet and up */}
+            <div className="tablet:flex relative col-span-3 hidden h-full flex-col gap-y-4">
+              <ImageStack
+                slot={1}
+                heightClass="tablet:h-[300px] h-[160px]"
+                sizes="(max-width: 1255px) 37vw, 25vw"
+                labelClass=""
+              />
+            </div>
+
+            {/* Image column 3 — desktop only */}
+            <div className="desktop:flex desktop:col-span-6 relative col-span-3 hidden h-full flex-col gap-y-4">
+              <ImageStack
+                slot={2}
+                heightClass="tablet:h-[300px] desktop:h-[400px] h-[160px]"
+                sizes="50vw"
+              />
+            </div>
+
+            <div className="desktop:col-start-7 tablet:col-span-7 desktop:col-span-6 relative col-span-4 h-full self-start">
+              {PROCESSES.map((process) => (
+                <p
+                  key={process.id}
+                  id={`process_description_${process.id}`}
+                  className="p-service-responsive desktop:!text-2xl absolute top-0 left-0 !leading-[125%] text-white/50"
                 >
-                  {process.images[0].label}
-                </span>
+                  {process.description}
+                </p>
               ))}
             </div>
-          </div>
-
-          <div className="tablet:flex relative col-span-3 hidden h-full flex-col gap-y-4">
-            <div className="tablet:h-[300px] relative h-[160px] w-full">
-              {PROCESSES.map((process, idx) => (
-                <Image
-                  key={idx}
-                  src={process.images[1].src}
-                  fill
-                  alt=""
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className={`object-cover ${
-                    idx === 0
-                      ? "process_image"
-                      : idx === 1
-                        ? "process_images_1"
-                        : idx === 2
-                          ? "process_images_2"
-                          : "process_images_3"
-                  }`}
-                  style={idx !== 0 ? { clipPath: "inset(0% 0% 100% 0%)" } : {}}
-                />
-              ))}
-            </div>
-            <div className="relative">
-              {PROCESSES.map((process, idx) => (
-                <span
-                  key={idx}
-                  className={`absolute top-0 left-0 text-sm text-white capitalize ${
-                    idx > 0 ? "opacity-0" : ""
-                  } ${
-                    idx === 0
-                      ? "process_images_label_0"
-                      : idx === 1
-                        ? "process_images_label_1"
-                        : idx === 2
-                          ? "process_images_label_2"
-                          : "process_images_label_3"
-                  }`}
-                >
-                  {process.images[1].label}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="desktop:flex desktop:col-span-6 relative col-span-3 hidden h-full flex-col gap-y-4">
-            <div className="tablet:h-[300px] desktop:h-[400px] relative h-[160px] w-full">
-              {PROCESSES.map((process, idx) => (
-                <Image
-                  key={idx}
-                  src={process.images[2].src}
-                  fill
-                  alt=""
-                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  className={`object-cover ${
-                    idx === 0
-                      ? "process_image"
-                      : idx === 1
-                        ? "process_images_1"
-                        : idx === 2
-                          ? "process_images_2"
-                          : "process_images_3"
-                  }`}
-                  style={idx !== 0 ? { clipPath: "inset(0% 0% 100% 0%)" } : {}}
-                />
-              ))}
-            </div>
-          </div>
-
-          <div className="desktop:col-start-7 tablet:col-span-7 desktop:col-span-6 relative col-span-4 h-full self-start">
-            {PROCESSES.map((process) => (
-              <p
-                key={process.id}
-                id={`process_description_${process.id}`}
-                className="p-service-responsive desktop:!text-2xl absolute top-0 left-0 !leading-[125%] text-white/50"
-              >
-                {process.description}
-              </p>
-            ))}
           </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 };
 

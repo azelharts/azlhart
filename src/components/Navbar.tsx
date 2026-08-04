@@ -4,13 +4,9 @@ import { useRef } from "react";
 
 import Link from "next/link";
 
-import gsap from "gsap";
-import DrawSVGPlugin from "gsap/dist/DrawSVGPlugin";
-import CustomEase from "gsap/dist/CustomEase";
-import { useGSAP } from "@gsap/react";
+import { gsap, useGSAP, ScrollTrigger } from "@/lib/gsap";
 
 import LogoSVG from "./LogoSVG";
-
 import CTA from "./CTA";
 import ScrambleText from "./ScrambleText";
 
@@ -19,21 +15,46 @@ const Navbar = () => {
   const logoRef = useRef<SVGSVGElement>(null);
   const logoPathRef = useRef<SVGPathElement>(null);
 
-  const { contextSafe } = useGSAP(() => {
-    gsap.registerPlugin(DrawSVGPlugin, CustomEase);
+  const { contextSafe } = useGSAP(
+    () => {
+      // The navbar's entrance (#navbar, .fade-up-2, .fill-width) is sequenced
+      // by the hero's intro timeline, not here — those elements are supposed
+      // to arrive at a specific beat of that sequence.
+      const mm = gsap.matchMedia(navRef);
 
-    gsap.from([logoPathRef.current, "#logo-link"], {
-      scrollTrigger: {
-        trigger: "#hero-header",
-        start: "bottom top",
-        toggleActions: "play none none reverse",
-      },
-      duration: 0.75,
-      ease: "power4.inOut",
-      drawSVG: 0,
-      autoAlpha: 0,
-    });
-  }, {});
+      mm.add("(prefers-reduced-motion: reduce)", () => {
+        // No draw-on, but the wordmark still swaps in on scroll: while the hero
+        // is on screen it would sit directly on top of the hero's own header.
+        const wordmark = [logoPathRef.current, "#logo-link"];
+
+        ScrollTrigger.create({
+          trigger: "#hero-header",
+          start: "bottom top",
+          refreshPriority: -1,
+          onEnter: () => gsap.set(wordmark, { autoAlpha: 1, drawSVG: "100%" }),
+          onLeaveBack: () => gsap.set(wordmark, { autoAlpha: 0, drawSVG: 0 }),
+        });
+      });
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.from([logoPathRef.current, "#logo-link"], {
+          scrollTrigger: {
+            trigger: "#hero-header",
+            start: "bottom top",
+            toggleActions: "play none none reverse",
+            // The navbar mounts above the hero it points at, so without an
+            // explicit priority ScrollTrigger refreshes it out of page order.
+            refreshPriority: -1,
+          },
+          duration: 0.75,
+          ease: "power4.inOut",
+          drawSVG: 0,
+          autoAlpha: 0,
+        });
+      });
+    },
+    { scope: navRef },
+  );
 
   const handleLogoMouseEnter = contextSafe(() => {
     gsap.to(logoRef.current, {
@@ -41,6 +62,7 @@ const Navbar = () => {
       ease: "power2.inOut",
       fill: "#FFFFFF",
       fillOpacity: 1,
+      overwrite: true,
     });
   });
 
@@ -49,6 +71,7 @@ const Navbar = () => {
       duration: 0.5,
       ease: "power2.inOut",
       fillOpacity: 0,
+      overwrite: true,
     });
   });
 
@@ -64,6 +87,7 @@ const Navbar = () => {
         onMouseEnter={handleLogoMouseEnter}
         onMouseLeave={handleLogoMouseLeave}
         id="logo-link"
+        aria-label="Azlhart home"
         className="invisible"
       >
         <LogoSVG
@@ -78,23 +102,25 @@ const Navbar = () => {
         <CTA text="let's talk" className="p-responsive" />
       </div>
 
-      {/* Nav Links */}
+      {/* Nav Links. prefetch is off because these routes do not exist yet —
+          Next was firing three 404 RSC requests on every page load. Drop the
+          prop once the pages are built. */}
       <div className="tablet:flex desktop:col-start-7 desktop:col-end-auto desktop:justify-self-start col-span-3 col-end-8 hidden justify-end gap-x-11 self-start">
         <div className="fade-up-2 flex items-center gap-x-6">
           <span>01</span>
-          <Link href="/about">
+          <Link href="/about" prefetch={false}>
             <ScrambleText text="studio" />
           </Link>
         </div>
         <div className="fade-up-2 flex items-center gap-x-6">
           <span>02</span>
-          <Link href="/works">
+          <Link href="/works" prefetch={false}>
             <ScrambleText text="works" />
           </Link>
         </div>
         <div className="fade-up-2 flex items-center gap-x-6">
           <span>03</span>
-          <Link href="/archive">
+          <Link href="/archive" prefetch={false}>
             <ScrambleText text="archive" />
           </Link>
         </div>

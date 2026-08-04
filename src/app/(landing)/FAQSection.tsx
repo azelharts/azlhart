@@ -1,20 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import Image from "next/image";
 
-import { useGSAP } from "@gsap/react";
-import gsap from "gsap";
-import CustomEase from "gsap/CustomEase";
-import SplitText from "gsap/dist/SplitText";
+import { Plus } from "lucide-react";
+
+import { gsap, useGSAP } from "@/lib/gsap";
+import { useFontsReady } from "@/lib/hooks";
+import { revealLines, revealFade, revealInstantly } from "@/lib/animations";
 
 import Header from "@/components/Header";
-
 import CTA from "@/components/CTA";
 import CurrentTime from "@/components/CurrentTime";
 import { drukWide } from "@/lib/utils";
-import { Plus } from "lucide-react";
 
 const FAQS = [
   {
@@ -59,158 +58,95 @@ const FAQS = [
   },
 ];
 
-const FAQItem = ({ faq }: { faq: (typeof FAQS)[0]; index: number }) => {
+const FAQItem = ({ faq }: { faq: (typeof FAQS)[0] }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const answerRef = useRef<HTMLSpanElement>(null);
+  const itemRef = useRef<HTMLDivElement>(null);
+  const answerRef = useRef<HTMLDivElement>(null);
   const iconRef = useRef<SVGSVGElement>(null);
+  const timeline = useRef<gsap.core.Timeline | null>(null);
+  const panelId = useId();
 
   const { contextSafe } = useGSAP(
     () => {
-      gsap.registerPlugin(CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      // One paused timeline built up front and played/reversed on click.
+      // Building a fresh timeline per click (the previous approach) left the
+      // old tweens running, so fast clicking stacked competing animations.
+      timeline.current = gsap
+        .timeline({ paused: true })
+        .to(answerRef.current, { height: "auto", autoAlpha: 1, y: 0 })
+        .to(iconRef.current, { rotate: 45 }, "<");
     },
-    { scope: buttonRef },
+    { scope: itemRef },
   );
 
   const toggleFAQ = contextSafe(() => {
-    const tl = gsap.timeline();
+    const tl = timeline.current;
+    if (!tl) return;
 
-    if (!isOpen) {
-      // Get the actual heights before animating
-      const answerHeight = answerRef.current?.scrollHeight || 0;
-      const totalHeight = 60 + 8 + 30 + answerHeight;
-
-      // Opening animation
-      tl.to(buttonRef.current, {
-        height: totalHeight,
-        duration: 0.75,
-        ease: "custom",
-      })
-        .to(
-          answerRef.current,
-          {
-            height: answerHeight,
-            y: 0,
-            opacity: 1,
-            duration: 0.75,
-            ease: "custom",
-          },
-          "<",
-        )
-        .to(
-          iconRef.current,
-          {
-            rotation: 45,
-            duration: 0.75,
-            ease: "custom",
-          },
-          "<",
-        );
-    } else {
-      // Closing animation
-      tl.to(buttonRef.current, {
-        height: 60,
-        duration: 0.75,
-        ease: "custom",
-      })
-        .to(
-          iconRef.current,
-          {
-            rotation: 0,
-            duration: 0.75,
-            ease: "custom",
-          },
-          "<",
-        )
-        .to(
-          answerRef.current,
-          {
-            height: 0,
-            y: 15,
-            opacity: 0,
-            duration: 0.75,
-            ease: "custom",
-          },
-          "<",
-        );
-    }
+    // invalidate() re-measures `height: "auto"`, so the panel stays correct
+    // after a resize or font swap changes how the answer wraps.
+    if (isOpen) tl.reverse();
+    else tl.invalidate().play();
 
     setIsOpen(!isOpen);
   });
 
   return (
-    <button
-      ref={buttonRef}
-      onClick={toggleFAQ}
-      className="faq-item flex h-[60px] w-full flex-col overflow-clip bg-white/5 px-4"
-    >
-      <div className="flex min-h-[60px] w-full items-center justify-between">
-        <span className="p-responsive text-left">{faq.question}</span>
-        <Plus ref={iconRef} width={16} height={16} className="shrink-0" />
-      </div>
-      <span
-        ref={answerRef}
-        className="p-responsive mt-2 mb-[30px] h-0 max-w-[90%] translate-y-[15px] text-left !leading-[125%] text-white/50 opacity-0"
+    <div ref={itemRef} className="faq-item bg-white/5">
+      <button
+        type="button"
+        onClick={toggleFAQ}
+        aria-expanded={isOpen}
+        aria-controls={panelId}
+        className="flex w-full flex-col px-4"
       >
-        {faq.answer}
-      </span>
-    </button>
+        <div className="flex min-h-[60px] w-full items-center justify-between">
+          <span className="p-responsive text-left">{faq.question}</span>
+          <Plus ref={iconRef} width={16} height={16} className="shrink-0" />
+        </div>
+        <div
+          id={panelId}
+          ref={answerRef}
+          className="h-0 w-full translate-y-[15px] overflow-hidden opacity-0"
+        >
+          <p className="p-responsive mt-2 mb-[30px] max-w-[90%] text-left !leading-[125%] text-white/50">
+            {faq.answer}
+          </p>
+        </div>
+      </button>
+    </div>
   );
 };
 
 const FAQSection = () => {
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const faqItemsRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+
+  const fontsReady = useFontsReady();
 
   useGSAP(
     () => {
-      gsap.registerPlugin(SplitText, CustomEase);
-      CustomEase.create("custom", "M0,0 C0.82,0.08 0.29,1 1,1");
+      if (!fontsReady) return;
 
-      document.fonts.ready.then(() => {
-        SplitText.create(headingRef.current, {
-          type: "lines",
-          autoSplit: true,
-          mask: "lines",
-          onSplit: (self) => {
-            return gsap.from(self.lines, {
-              scrollTrigger: {
-                trigger: headingRef.current,
-                start: "top bottom",
-                once: true,
-              },
-              y: "100%",
-              stagger: 0.075,
-              ease: "custom",
-            });
-          },
-        });
+      // Scoped to this component: useGSAP's `scope` only covers selectors
+      // resolved synchronously in its callback, and matchMedia handlers run
+      // later. That matters here — `.work-count` exists in both this section
+      // and the other one, so an unscoped lookup animates both.
+      const mm = gsap.matchMedia(containerRef);
 
-        // gsap.from(imageRef.current, {
-        //   scrollTrigger: {
-        //     trigger: imageRef.current,
-        //   },
-        //   clipPath: "inset(0% 0% 100% 0%)",
-        //   duration: 0.75,
-        //   ease: "custom",
-        // });
+      mm.add("(prefers-reduced-motion: reduce)", () =>
+        revealInstantly([".faq-item"]),
+      );
 
-        gsap.from(".faq-item", {
-          scrollTrigger: {
-            trigger: faqItemsRef.current,
-            start: "top bottom",
-            once: true,
-          },
-          duration: 0.75,
-          opacity: 0,
-          ease: "custom",
-        });
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        revealLines(headingRef.current);
+        // One trigger with a stagger rather than eight — the items are stacked
+        // in a single column, so they all enter within the same scroll moment.
+        revealFade(".faq-item", 0.05);
       });
     },
-    { scope: containerRef },
+    { dependencies: [fontsReady], scope: containerRef, revertOnUpdate: true },
   );
 
   return (
@@ -235,12 +171,9 @@ const FAQSection = () => {
             <CTA text="contact us" />
           </div>
 
-          <div
-            ref={faqItemsRef}
-            className="tablet:col-span-4 desktop:col-start-7 desktop:col-span-6 tablet:order-3 tablet:col-start-5 col-span-full flex flex-col gap-y-4"
-          >
-            {FAQS.map((faq, idx) => (
-              <FAQItem key={idx} faq={faq} index={idx} />
+          <div className="tablet:col-span-4 desktop:col-start-7 desktop:col-span-6 tablet:order-3 tablet:col-start-5 col-span-full flex flex-col gap-y-4">
+            {FAQS.map((faq) => (
+              <FAQItem key={faq.question} faq={faq} />
             ))}
           </div>
 
@@ -259,12 +192,13 @@ const FAQSection = () => {
                 <CurrentTime />
               </div>
             </div>
-            <div className="tablet:h-[350px] relative h-[160px]">
+            <div ref={imageRef} className="tablet:h-[350px] relative h-[160px]">
               <Image
-                ref={imageRef}
                 src="/images/faq.jpg"
                 alt=""
                 fill
+                loading="lazy"
+                sizes="(max-width: 833px) 100vw, (max-width: 1255px) 37vw, 33vw"
                 className="object-cover"
               />
             </div>
