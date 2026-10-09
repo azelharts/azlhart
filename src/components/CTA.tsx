@@ -1,28 +1,28 @@
+import Link from "next/link";
 import { cn } from "@/lib/utils";
-import ScrambleText from "./ScrambleText";
-
-import { ArrowRight } from "lucide-react";
-
+import { ArrowUpRight } from "lucide-react";
 interface CTAProps {
   text: string;
+  href?: string;
   className?: string;
   ctaIcon?: boolean;
 }
-
-const CTA = ({ text, className, ctaIcon = false }: CTAProps) => {
+export default function CTA({
+  text,
+  href = "/contact",
+  className,
+  ctaIcon = false,
+}: CTAProps) {
   return (
-    <div className={cn("flex items-center justify-end gap-x-2", className)}>
-      <ArrowRight
-        width={14}
-        height={14}
-        strokeWidth={1}
-        className={ctaIcon ? "cta-icon-responsive" : "icon-responsive"}
-      />
-      <button>
-        <ScrambleText text={text} />
-      </button>
-    </div>
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex items-center justify-end gap-2 underline-offset-8 hover:underline",
+        className,
+      )}
+    >
+      <span>{text}</span>
+      <ArrowUpRight aria-hidden="true" size={ctaIcon ? 24 : 16} />
+    </Link>
   );
-};
-
-export default CTA;
+}

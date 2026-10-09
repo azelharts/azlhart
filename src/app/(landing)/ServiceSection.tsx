@@ -13,6 +13,7 @@ import {
   revealInstantly,
 } from "@/lib/animations";
 
+import CTA from "@/components/CTA";
 import Header from "@/components/Header";
 
 import { drukWide } from "@/lib/utils";
@@ -82,7 +83,11 @@ const ServiceSection = () => {
   return (
     <section className="relative flex flex-col overflow-clip" ref={serviceRef}>
       <div className="max-w-container px-container relative mx-auto h-full w-full">
-        <Header headline="capabilites" number={2} subText="digital-execution" />
+        <Header
+          headline="capabilities"
+          number={2}
+          subText="digital-execution"
+        />
 
         <div className="custom-grid desktop:gap-y-32 h-fit gap-y-16 py-16">
           {services.map((service, idx) => (
@@ -122,6 +127,7 @@ const ServiceSection = () => {
             </div>
           ))}
         </div>
+        <CTA href="/services" text="Explore services and deliverables" />
       </div>
     </section>
   );
