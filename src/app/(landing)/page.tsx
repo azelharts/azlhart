@@ -1,15 +1,17 @@
+import type { Metadata } from "next";
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 import HeroSection from "./HeroSection";
 import AboutSection from "./AboutSection";
 import ServiceSection from "./ServiceSection";
 import WorkSection from "./WorkSection";
 import ProcessSection from "./ProcessSection";
 import FAQSection from "./FAQSection";
-import TestimonialSection from "./TestimonialSection";
+
 import FrameSection from "./FrameSection";
 
 const Home = () => {
   return (
-    <main className="flex flex-col gap-y-20">
+    <main id="main-content" className="flex flex-col gap-y-20">
       <HeroSection />
       <AboutSection />
       <ServiceSection />
@@ -17,8 +19,6 @@ const Home = () => {
       <ProcessSection />
       <FAQSection />
       <FrameSection />
-      <TestimonialSection />
-      <section className="h-screen w-full" />
     </main>
   );
 };

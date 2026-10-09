@@ -6,26 +6,28 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "clsx": "^2.1.1",
     "gsap": "^3.13.0",
     "lucide-react": "^0.543.0",
-    "next": "15.5.9",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "next": "^15.5.27",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.3",
+    "eslint-config-next": "^15.5.27",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "tailwindcss": "^4",
@@ -35,5 +37,8 @@
     "plugins": [
       "prettier-plugin-tailwindcss"
     ]
+  },
+  "overrides": {
+    "postcss": "^8.5.29"
   }
 }
