@@ -1,4 +1,4 @@
-import { contactEmail } from "@/lib/site";
+import { contactEmail, contactEnabled } from "@/lib/site";
 import type { Metadata } from "next";
 import PageIntro from "@/components/PageIntro";
 export const metadata: Metadata = {
@@ -21,6 +21,12 @@ export default function Privacy() {
           not submit your details to a server or save them in browser storage.
           You choose whether to send the message through your email provider.
         </p>
+        {!contactEnabled && (
+          <p>
+            Inquiries are not open yet. The current form lets you prepare and
+            copy a brief without transmitting it to the studio.
+          </p>
+        )}
         <h2>When you send an email</h2>
         <p>
           The name, contact information and project details you include are
@@ -36,8 +42,14 @@ export default function Privacy() {
         </p>
         <h2>Questions about your information</h2>
         <p>
-          Contact <a href={`mailto:${contactEmail}`}>{contactEmail}</a> to ask
-          about information you have shared or request its deletion.
+          {contactEnabled ? (
+            <>
+              Contact <a href={`mailto:${contactEmail}`}>{contactEmail}</a> to
+              ask about information you have shared or request its deletion.
+            </>
+          ) : (
+            "A studio contact address will be provided when inquiries open. The current brief form does not collect your information."
+          )}
         </p>
       </div>
     </main>

@@ -4,9 +4,10 @@ const routes = [
   "/about",
   "/services",
   "/works",
-  "/works/feetstudio",
+  "/works/bpbd-kota-kupang",
+  "/works/hirestack",
   "/works/aetheria",
-  "/works/c-and-a",
+  "/works/onlytheflames",
   "/archive",
   "/contact",
   "/privacy",
@@ -49,23 +50,29 @@ test("navigation and project inquiry work across client transitions", async ({
       .click();
   }
   await expect(page).toHaveURL(/\/works$/);
-  await page.getByRole("link", { name: /FeetStudio Framer/ }).click();
+  await page.getByRole("link", { name: /Hirestack Next.js/ }).click();
   await page.getByRole("link", { name: "Discuss your project" }).click();
   await expect(page.getByLabel("Tell me about the project")).toHaveValue(
-    /FeetStudio/,
+    /Hirestack/,
   );
   await page.getByLabel("Your name").fill("Test Buyer");
   await page.getByLabel("Company", { exact: true }).fill("Test Brand");
   await page.getByLabel("Work email").fill("buyer@example.com");
-  await page.getByRole("button", { name: "Prepare email brief" }).click();
+  await page.getByRole("button", { name: "Prepare project brief" }).click();
   await expect(
     page.getByRole("heading", { name: "Your brief is ready" }),
   ).toBeVisible();
-  const href = await page
-    .getByRole("link", { name: "Open email app" })
-    .getAttribute("href");
-  expect(decodeURIComponent(href!)).toContain("buyer@example.com");
-  expect(decodeURIComponent(href!)).toContain("FeetStudio");
+  await expect(page.getByRole("link", { name: "Open email app" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator('a[href^="mailto:"]')).toHaveCount(0);
+  await page.getByText("View and copy your brief", { exact: true }).click();
+  await expect(page.locator("pre")).toContainText("buyer@example.com");
+  await expect(page.locator("pre")).toContainText("Hirestack");
+  await page.getByLabel("Company", { exact: true }).fill("Updated Brand");
+  await expect(
+    page.getByRole("heading", { name: "Your brief is ready" }),
+  ).toHaveCount(0);
 });
 test("FAQ and missing-page recovery work", async ({ page }) => {
   await page.goto("/");

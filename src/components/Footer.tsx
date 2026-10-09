@@ -1,4 +1,4 @@
-import { contactEmail } from "@/lib/site";
+import { contactEmail, contactEnabled } from "@/lib/site";
 import Link from "next/link";
 export default function Footer() {
   return (
@@ -17,7 +17,11 @@ export default function Footer() {
           <br />
           <span>Kupang, Indonesia · Working worldwide · UTC+8</span>
         </p>
-        <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+        {contactEnabled ? (
+          <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
+        ) : (
+          <span>Studio inquiries opening soon</span>
+        )}
         <nav aria-label="Footer navigation">
           <Link href="/services">Services</Link>
           <Link href="/works">Work</Link>

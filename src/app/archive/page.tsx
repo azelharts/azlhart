@@ -13,7 +13,8 @@ export default function Archive() {
     <main id="main-content" className="inner-page">
       <PageIntro label="04 / Archive" title="The project index.">
         <p>
-          A quick view of the work featured in the portfolio, organized by year.
+          A quick view of the work featured in the portfolio, organized by the
+          year each repository began.
         </p>
       </PageIntro>
       <div className="archive-list">

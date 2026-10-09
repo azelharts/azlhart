@@ -39,20 +39,24 @@ export default async function Project({
         ← All work
       </Link>
       <PageIntro
-        label={`${project.year} / ${project.platform}`}
+        label={`${project.category} / ${project.platform}`}
         title={project.name}
       >
-        <p>Selected website project · Azlhart</p>
+        <p>{project.summary}</p>
       </PageIntro>
       <Image
         className="case-image"
         src={project.image}
-        alt={`${project.name} project cover`}
+        alt={project.imageAlt}
         width={1920}
         height={1080}
         sizes="100vw"
         priority
       />
+      <p className="screenshot-caption">
+        Public preview capture · {project.category}. Protected workflows are not
+        shown.
+      </p>
       <section className="editorial-grid detail-section">
         <div>
           <p className="eyebrow">Project at a glance</p>
@@ -66,22 +70,32 @@ export default async function Project({
               <dd>{project.platform}</dd>
             </div>
             <div>
-              <dt>Year</dt>
+              <dt>Repository started</dt>
               <dd>{project.year}</dd>
             </div>
           </dl>
         </div>
         <div className="prose">
-          <h2>Considering a similar project?</h2>
-          <p>
-            Use this work as a starting point for a conversation about visual
-            direction and platform fit. Share the pages, functionality and
-            launch goals your team has in mind.
-          </p>
-          <p>
-            For a deeper discussion of the project and relevant experience, get
-            in touch with Mario.
-          </p>
+          <h2>The brief behind the build</h2>
+          <p>{project.context}</p>
+          <h3>Implemented in the project</h3>
+          <ul>
+            {project.features.map((feature) => (
+              <li key={feature}>{feature}</li>
+            ))}
+          </ul>
+          <h3>Why it matters for your team</h3>
+          <p>{project.relevance}</p>
+          <p className="project-boundary">{project.boundary}</p>
+          <p>{project.stack}</p>
+          <div className="project-evidence-links">
+            <a href={project.demo} target="_blank" rel="noopener noreferrer">
+              {project.demoLabel} ↗
+            </a>
+            <a href={project.repo} target="_blank" rel="noopener noreferrer">
+              View public source ↗
+            </a>
+          </div>
           <CTA
             href={`/contact?project=${encodeURIComponent(project.name)}`}
             text="Discuss your project"

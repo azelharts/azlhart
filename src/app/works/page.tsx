@@ -4,7 +4,7 @@ import ProjectGrid from "@/components/ProjectGrid";
 export const metadata: Metadata = {
   title: "Selected work",
   description:
-    "Explore selected Framer and Next.js website projects by Azlhart.",
+    "Explore application, research and portfolio projects with public source code and previews.",
   alternates: { canonical: "/works" },
 };
 export default function Works() {
@@ -12,8 +12,9 @@ export default function Works() {
     <main id="main-content" className="inner-page">
       <PageIntro label="03 / Selected work" title="A feel for the work.">
         <p>
-          A selection of website projects across Framer and Next.js. Explore the
-          visual direction, then let’s discuss what your own project needs.
+          Websites and applications, with public previews and source code.
+          Explore the implemented features and project context to find the
+          experience relevant to your team.
         </p>
       </PageIntro>
       <ProjectGrid />

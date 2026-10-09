@@ -19,19 +19,28 @@ npm run test:e2e
 npm audit --omit=dev
 ```
 
-The browser suite runs against a production server on port 3100. It covers all ten public pages, mobile navigation, project-to-inquiry transitions, brief preparation, FAQs, reduced motion, missing projects, runtime errors and horizontal overflow.
+The browser suite runs against a production server on port 3100. It covers all eleven public pages, mobile navigation, project-to-inquiry transitions, brief preparation, FAQs, reduced motion, missing projects, runtime errors and horizontal overflow.
 
 ## Pages and content
 
 - `/`: positioning, capabilities, selected work, process and FAQs.
 - `/about`: studio, location and collaboration approach.
 - `/services`: service fit, typical deliverables and process.
-- `/works` and `/works/[slug]`: three existing projects and their individual presentations.
+- `/works` and `/works/[slug]`: four public-source projects and their individual presentations.
 - `/archive`: project index ordered by year.
 - `/contact`: locally prepared email brief with email-app and copy fallbacks.
 - `/privacy`: explanation of the inquiry flow.
 
-Project facts and service content live in `src/lib/content.ts`. The project records intentionally contain only names, platforms, dates and assets present in the original repository. No conversion metrics, client URLs, expanded delivery claims or new testimonials have been invented.
+Project facts and service content live in `src/lib/content.ts`. The portfolio now uses public repository evidence and real public-site captures instead of the original unverified FeetStudio/C&A entries. Dates are repository creation years, not asserted launch dates.
+
+| Project                                                        | Evidence reviewed                                                     | Presentation                                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [SIncan-KotaKu](https://github.com/azelharts/bpbd-kota-kupang) | Public homepage, incident management page and route structure         | Public-information application; no claim of an official commission or operational adoption |
+| [Hirestack](https://github.com/azelharts/hirestack)            | README, recruiter/job-seeker pages and application routes             | Recruitment application; screenshot is the public sign-in page                             |
+| [Aetheria](https://github.com/azelharts/aetheria)              | Repository description, journal creation, tutorial and public preview | Mobile-focused thesis prototype, under development                                         |
+| [Onlytheflames](https://github.com/azelharts/onlytheflames)    | README, landing implementation, work index and public preview         | Personal motion-focused portfolio                                                          |
+
+Screenshots in `public/images/projects` capture publicly accessible pages only. No authenticated user data or private repository content is published. Learning/tutorial projects were not promoted to client work. No commercial results or client relationships are inferred from repository ownership.
 
 ## Launch configuration
 
@@ -42,9 +51,11 @@ NEXT_PUBLIC_SITE_URL=https://azlhart.vercel.app
 NEXT_PUBLIC_CONTACT_EMAIL=your-verified-inbox@example.com
 ```
 
-The site URL defaults to the repository's existing Vercel address. The contact address falls back to the original `hello@azlhart.com`, but **that domain did not resolve during this review**. Verify the receiving inbox and replace the address before launch. Public environment values are compiled into the client bundle and require a rebuild after changes.
+The owner confirmed that `azlhart.com` is a mock/planned domain to be purchased later. Until `NEXT_PUBLIC_CONTACT_EMAIL` is configured, the contact page says inquiries are not open and offers local brief preparation/copy only. It does not link to the mock inbox. Setting an active address enables the email links after rebuilding.
 
-The contact form has no submission backend. It validates and prepares a brief, then the visitor sends it with their email provider. It never reports an email as sent. If server delivery is added later, implement validation, abuse prevention, success/failure states and an updated privacy notice.
+The site URL defaults to the repository's existing Vercel address. Change it when the new domain is connected. Public environment values are compiled into the client bundle.
+
+The contact form has no submission backend and never reports mail as sent. When enabled, visitors review and send the prepared brief in their own email app. If server delivery is added later, implement validation, abuse prevention, success/failure states and an updated privacy notice.
 
 ## Buyer-perspective review
 
@@ -55,7 +66,7 @@ The original site had a strong visual identity, but buyers could not complete th
 | Studio, work and archive navigation led to missing routes         | Complete pages plus services, contact, privacy and project details                           |
 | Inquiry CTAs were buttons without actions                         | Real links to a usable inquiry flow                                                          |
 | Mobile menu was decorative                                        | Keyboard-accessible disclosure menu with Escape handling                                     |
-| Portfolio showed three images but claimed nine projects           | Shared three-project catalog, linked presentations and honest count                          |
+| Portfolio showed three images but claimed nine projects           | Shared four-project catalog, linked presentations and honest count                           |
 | Long hero intro withheld content; process consumed five viewports | Immediate server-rendered hero and readable four-step process                                |
 | Reduced motion omitted later process steps                        | All steps available without animation                                                        |
 | Blank final viewport and no shared footer                         | Contact invitation, studio details and footer navigation                                     |
@@ -66,8 +77,8 @@ The original site had a strong visual identity, but buyers could not complete th
 
 ### Content the owner still needs to supply
 
-1. A verified inquiry inbox; confirm the final production domain.
-2. Approved project scope/role, business challenge, delivered work, actual website screenshots, live URLs and outcomes. Existing project assets are cover imagery rather than screenshots of the delivered websites. The new pages are project presentations, not evidence-rich case studies yet.
+1. An active inquiry inbox when ready to launch; purchase/connect the planned domain later.
+2. Approved project roles, client/commission status and measured outcomes where available. Public features and screenshots are now included; repositories alone do not establish commercial results.
 3. Permission and accurate attribution for testimonials, including appropriate portraits or removal of portraits.
 4. Commercial terms: actual minimum budget, typical timelines, revision policy, ownership, hosting and support. The site discusses agreeing these in a proposal rather than inventing commitments.
 

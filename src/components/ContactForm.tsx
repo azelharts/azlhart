@@ -1,5 +1,5 @@
 "use client";
-import { contactEmail } from "@/lib/site";
+import { contactEmail, contactEnabled } from "@/lib/site";
 import { useState, type FormEvent } from "react";
 export default function ContactForm({
   service = "",
@@ -91,22 +91,30 @@ export default function ContactForm({
         </label>
       </div>
       <p className="form-note">
-        This prepares an email on your device. Nothing is sent or stored by this
-        form. You’ll review and send the brief in your email app.
+        {contactEnabled
+          ? "This prepares an email on your device. Review and send it in your email app."
+          : "Prepare and copy your brief for later. Inquiries are not open yet."}{" "}
+        Nothing is sent or stored by this form.
       </p>
       <button className="solid-button" type="submit">
-        Prepare email brief ↗
+        Prepare project brief ↗
       </button>
       {brief && (
         <div className="brief-result" role="status">
           <h2>Your brief is ready</h2>
-          <p>Open your email app, then send the message to {contactEmail}.</p>
-          <a
-            className="solid-button"
-            href={`mailto:${contactEmail}?subject=${encodeURIComponent("Project inquiry — Azlhart")}&body=${encodeURIComponent(brief)}`}
-          >
-            Open email app ↗
-          </a>
+          <p>
+            {contactEnabled
+              ? `Open your email app, then send the message to ${contactEmail}.`
+              : "Copy your brief and keep it for when inquiries open. Nothing has been sent."}
+          </p>
+          {contactEnabled && (
+            <a
+              className="solid-button"
+              href={`mailto:${contactEmail}?subject=${encodeURIComponent("Project inquiry — Azlhart")}&body=${encodeURIComponent(brief)}`}
+            >
+              Open email app ↗
+            </a>
+          )}
           <button
             type="button"
             className="text-button"
@@ -122,7 +130,7 @@ export default function ContactForm({
             {copied ? "Brief copied" : "Copy brief"}
           </button>
           <details>
-            <summary>No email app? View and copy your brief</summary>
+            <summary>View and copy your brief</summary>
             <pre>{brief}</pre>
           </details>
         </div>

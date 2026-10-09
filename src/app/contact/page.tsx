@@ -1,4 +1,4 @@
-import { contactEmail } from "@/lib/site";
+import { contactEmail, contactEnabled } from "@/lib/site";
 import type { Metadata } from "next";
 import PageIntro from "@/components/PageIntro";
 import ContactForm from "@/components/ContactForm";
@@ -31,9 +31,17 @@ export default async function Contact({
       <div className="contact-layout">
         <aside className="prose">
           <h2>Let’s find the right fit.</h2>
-          <a className="contact-email" href={`mailto:${contactEmail}`}>
-            {contactEmail} ↗
-          </a>
+          {contactEnabled ? (
+            <a className="contact-email" href={`mailto:${contactEmail}`}>
+              {contactEmail} ↗
+            </a>
+          ) : (
+            <p className="inquiry-notice">
+              Inquiries aren’t open yet. You can prepare and copy a project
+              brief here. Email contact will be available when the studio
+              launches.
+            </p>
+          )}
           <p>
             Kupang, Indonesia
             <br />
@@ -48,7 +56,9 @@ export default async function Contact({
               kickoff.
             </li>
           </ol>
-          <p>Prefer your own format? Email your brief directly.</p>
+          {contactEnabled && (
+            <p>Prefer your own format? Email your brief directly.</p>
+          )}
         </aside>
         <ContactForm service={service} project={project} />
       </div>
