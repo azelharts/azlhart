@@ -10,6 +10,12 @@ export default function ContactForm({
 }) {
   const [brief, setBrief] = useState("");
   const [copied, setCopied] = useState(false);
+  const [summary, setSummary] = useState({
+    service: service || "Let’s find the right fit",
+    company: "Your company",
+    timeline: "Launch to be defined",
+    completed: 0,
+  });
   function prepare(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -22,11 +28,38 @@ export default function ContactForm({
     <form
       className="contact-form"
       onSubmit={prepare}
-      onChange={() => {
+      onChange={(event) => {
+        const data = new FormData(event.currentTarget);
+        setSummary({
+          service: String(data.get("service") || "Let’s find the right fit"),
+          company: String(data.get("company") || "Your company"),
+          timeline: String(data.get("timeline") || "Launch to be defined"),
+          completed: ["name", "company", "email", "message"].filter((field) =>
+            String(data.get(field) || "").trim(),
+          ).length,
+        });
         setBrief("");
         setCopied(false);
       }}
     >
+      <div className="brief-preview">
+        <p className="eyebrow">Your project, taking shape</p>
+        <p className="brief-preview-title">{summary.company}</p>
+        <p>
+          {summary.service} <span>↗</span>
+        </p>
+        <p className="brief-preview-timing">{summary.timeline}</p>
+        <div
+          className="brief-progress"
+          role="progressbar"
+          aria-label="Required fields completed"
+          aria-valuemin={0}
+          aria-valuemax={4}
+          aria-valuenow={summary.completed}
+        >
+          <span style={{ width: `${summary.completed * 25}%` }} />
+        </div>
+      </div>
       <div className="form-grid">
         <label>
           Your name

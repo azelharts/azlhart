@@ -17,6 +17,7 @@ const ScrambleText = ({ text }: { text: string }) => {
 
   const scramble = (speed: number) =>
     contextSafe(() => {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       gsap.to(textRef.current, {
         duration: 0.45,
         ease: "none",

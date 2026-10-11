@@ -19,7 +19,7 @@ npm run test:e2e
 npm audit --omit=dev
 ```
 
-The browser suite runs against a production server on port 3100. It covers all eleven public pages, mobile navigation, project-to-inquiry transitions, brief preparation, FAQs, reduced motion, missing projects, runtime errors and horizontal overflow.
+The browser suite runs against a production server on port 3100. It covers all eleven public pages, mobile navigation, project-to-inquiry transitions, brief preparation, FAQs, reduced motion, missing projects, runtime errors and horizontal overflow. Interaction coverage includes gallery/index changes, project inspection, service selection, studio studies, the motion lab, browser back and keyboard focus.
 
 ## Pages and content
 
@@ -27,7 +27,7 @@ The browser suite runs against a production server on port 3100. It covers all e
 - `/about`: studio, location and collaboration approach.
 - `/services`: service fit, typical deliverables and process.
 - `/works` and `/works/[slug]`: four public-source projects and their individual presentations.
-- `/archive`: project index ordered by year.
+- `/archive`: three playable motion studies (Draw, Resolve, Reveal), plus the project index.
 - `/contact`: locally prepared email brief with email-app and copy fallbacks.
 - `/privacy`: explanation of the inquiry flow.
 
@@ -41,6 +41,16 @@ Project facts and service content live in `src/lib/content.ts`. The portfolio no
 | [Onlytheflames](https://github.com/azelharts/onlytheflames)    | README, landing implementation, work index and public preview         | Personal motion-focused portfolio                                                          |
 
 Screenshots in `public/images/projects` capture publicly accessible pages only. No authenticated user data or private repository content is published. Learning/tutorial projects were not promoted to client work. No commercial results or client relationships are inferred from repository ownership.
+
+## Motion and interaction
+
+GSAP owns the animation timelines, text splitting, drawing and scroll triggers. Lenis smooths desktop wheel input on the native document scroll; touch input stays native. The smooth-scroll instance persists across routes and is destroyed when reduced motion is selected. Avoid adding a second scroll engine or transformed fixed page wrapper.
+
+The homepage restores the original visual assets and motion motifs. Returning visits shorten the intro; its replay/skip control stays available. Process steps advance with desktop scrolling and can also be selected directly. Small screens use the same controls without a pinned scroll runway. Reduced motion presents all four steps as readable content.
+
+Project links use the browser View Transition API when available, with a normal Next.js navigation fallback. Shared image names connect gallery items to case-study viewers. Archive studies and interface controls also work without this API. The SIncan-KotaKu viewer includes an additional public mobile capture; inspection enlarges the original capture and does not represent a live embedded application.
+
+Check motion in a browser, including repeated inputs, reversing scroll, switching routes during playback, resizing and keyboard navigation. Do not replace the creative sequences with static layouts as a performance shortcut.
 
 ## Launch configuration
 
@@ -61,19 +71,19 @@ The contact form has no submission backend and never reports mail as sent. When 
 
 The original site had a strong visual identity, but buyers could not complete the basic evaluation and inquiry journey:
 
-| Finding                                                           | Resolution                                                                                   |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Studio, work and archive navigation led to missing routes         | Complete pages plus services, contact, privacy and project details                           |
-| Inquiry CTAs were buttons without actions                         | Real links to a usable inquiry flow                                                          |
-| Mobile menu was decorative                                        | Keyboard-accessible disclosure menu with Escape handling                                     |
-| Portfolio showed three images but claimed nine projects           | Shared four-project catalog, linked presentations and honest count                           |
-| Long hero intro withheld content; process consumed five viewports | Immediate server-rendered hero and readable four-step process                                |
-| Reduced motion omitted later process steps                        | All steps available without animation                                                        |
-| Blank final viewport and no shared footer                         | Contact invitation, studio details and footer navigation                                     |
-| Every testimonial used the same profile image; provenance absent  | Testimonials withheld from the homepage pending owner verification; original source retained |
-| Global smooth-scroll and navbar depended on homepage animation    | Native scrolling and persistent route-independent navigation                                 |
-| Public assets cached as immutable despite stable filenames        | One-day revalidation policy                                                                  |
-| Framework and transitive dependency audit findings                | Next.js 15 patch update and patched PostCSS override                                         |
+| Finding                                                          | Resolution                                                                                   |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Studio, work and archive navigation led to missing routes        | Complete pages plus services, contact, privacy and project details                           |
+| Inquiry CTAs were buttons without actions                        | Real links to a usable inquiry flow                                                          |
+| Mobile menu was decorative                                       | Animated dialog menu with focus containment and Escape handling                              |
+| Portfolio showed three images but claimed nine projects          | Shared four-project catalog, linked presentations and honest count                           |
+| Original motion needed to extend across the site                 | Logo drawing, cinematic video, masked type and an animated, directly selectable process      |
+| Reduced motion omitted later process steps                       | All steps available without animation                                                        |
+| Blank final viewport and no shared footer                        | Contact invitation, studio details and footer navigation                                     |
+| Every testimonial used the same profile image; provenance absent | Testimonials withheld from the homepage pending owner verification; original source retained |
+| Global smooth-scroll and navbar depended on homepage animation   | Native-root smooth scrolling with Lenis and persistent route-independent navigation          |
+| Public assets cached as immutable despite stable filenames       | One-day revalidation policy                                                                  |
+| Framework and transitive dependency audit findings               | Next.js 15 patch update and patched PostCSS override                                         |
 
 ### Content the owner still needs to supply
 

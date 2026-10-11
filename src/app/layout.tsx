@@ -7,6 +7,8 @@ import { Inter } from "next/font/google";
 
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import SmoothScroll from "@/components/SmoothScroll";
+import { TransitionProvider } from "@/components/TransitionLink";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -66,9 +68,13 @@ export default function RootLayout({
         <a href="#main-content" className="skip-link">
           Skip to content
         </a>
-        <Navbar />
-        {children}
-        <Footer />
+        <TransitionProvider>
+          <SmoothScroll>
+            <Navbar />
+            {children}
+            <Footer />
+          </SmoothScroll>
+        </TransitionProvider>
       </body>
     </html>
   );

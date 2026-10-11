@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import StudioStack from "@/components/StudioStack";
 import PageIntro from "@/components/PageIntro";
 import CTA from "@/components/CTA";
 export const metadata: Metadata = {
@@ -19,14 +19,7 @@ export default function About() {
         </p>
       </PageIntro>
       <section className="editorial-grid">
-        <div className="editorial-image">
-          <Image
-            src="/images/landing-1.jpg"
-            alt="Visual study from the Azlhart studio"
-            fill
-            sizes="(max-width: 700px) 100vw, 50vw"
-          />
-        </div>
+        <StudioStack />
         <div className="prose">
           <p className="eyebrow">Based in Kupang. Connected worldwide.</p>
           <h2>
