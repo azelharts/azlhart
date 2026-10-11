@@ -102,5 +102,11 @@ test("reduced motion keeps content and all process steps accessible", async ({
     await expect(
       page.getByRole("heading", { name, exact: true }),
     ).toBeVisible();
-  expect(await page.locator("video").getAttribute("src")).toBeNull();
+  expect(
+    await page
+      .locator("video")
+      .evaluateAll((videos) =>
+        videos.every((video) => !video.getAttribute("src")),
+      ),
+  ).toBeTruthy();
 });

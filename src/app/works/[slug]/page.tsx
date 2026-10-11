@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
+import ProjectViewer from "@/components/ProjectViewer";
+import Link from "@/components/TransitionLink";
 import { notFound } from "next/navigation";
 import { projects } from "@/lib/content";
 import PageIntro from "@/components/PageIntro";
@@ -44,15 +44,7 @@ export default async function Project({
       >
         <p>{project.summary}</p>
       </PageIntro>
-      <Image
-        className="case-image"
-        src={project.image}
-        alt={project.imageAlt}
-        width={1920}
-        height={1080}
-        sizes="100vw"
-        priority
-      />
+      <ProjectViewer key={project.slug} slug={project.slug} />
       <p className="screenshot-caption">
         Public preview capture · {project.category}. Protected workflows are not
         shown.
