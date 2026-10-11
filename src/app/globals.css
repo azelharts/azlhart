@@ -1931,3 +1931,16 @@ input[type="range"] {
   color: var(--accent);
   border-color: var(--accent);
 }
+@media (max-width: 400px) {
+  .archive-list > a {
+    grid-template-columns: 40px minmax(0, 1fr) 16px;
+  }
+  .archive-list > a > span:nth-child(3) {
+    display: none;
+  }
+  .archive-list h2 {
+    font-size: 20px;
+    letter-spacing: -0.03em;
+    overflow-wrap: anywhere;
+  }
+}
