@@ -45,7 +45,11 @@ const AboutSection = () => {
     <section className="relative flex flex-col overflow-clip" ref={aboutRef}>
       {/* Container */}
       <div className="max-w-container px-container relative mx-auto h-full w-full">
-        <Header headline="the studio" number={1} subText="visual-thinker" />
+        <Header
+          headline="personal-profile"
+          number={1}
+          subText="visual-thinker"
+        />
 
         <div className="custom-grid tablet:gap-y-6 desktop:gap-y-16 h-fit gap-y-16 py-16">
           {/* The wipe animates this wrapper, not the <img> — next/image
@@ -77,8 +81,7 @@ const AboutSection = () => {
           </p>
 
           <CTA
-            text="more about the studio"
-            href="/about"
+            text="more about us"
             className="cta-p-responsive tablet:col-end-7 desktop:col-end-11 col-end-5"
             ctaIcon
           />

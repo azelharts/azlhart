@@ -10,9 +10,9 @@
  */
 
 import gsap from "gsap";
-import { Flip } from "gsap/Flip";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ScrollSmoother } from "gsap/ScrollSmoother";
 import { SplitText } from "gsap/SplitText";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { ScrambleTextPlugin } from "gsap/ScrambleTextPlugin";
@@ -20,8 +20,8 @@ import { CustomEase } from "gsap/CustomEase";
 
 gsap.registerPlugin(
   useGSAP,
-  Flip,
   ScrollTrigger,
+  ScrollSmoother,
   SplitText,
   DrawSVGPlugin,
   ScrambleTextPlugin,
@@ -44,8 +44,8 @@ ScrollTrigger.config({ ignoreMobileResize: true });
 export {
   gsap,
   useGSAP,
-  Flip,
   ScrollTrigger,
+  ScrollSmoother,
   SplitText,
   DrawSVGPlugin,
   ScrambleTextPlugin,

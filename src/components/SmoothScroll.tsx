@@ -1,99 +1,50 @@
 "use client";
 
-import Lenis from "lenis";
-import "lenis/dist/lenis.css";
-import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useRef } from "react";
-import { useGSAP, ScrollTrigger, gsap } from "@/lib/gsap";
+import { useGSAP, ScrollSmoother, ScrollTrigger, gsap } from "@/lib/gsap";
 
-const ScrollContext = createContext({
-  scrollTo: (top: number) => window.scrollTo({ top, behavior: "instant" }),
-  lock: (locked: boolean) => {
-    void locked;
-  },
-});
-export const useStudioScroll = () => useContext(ScrollContext);
+/**
+ * Owns the ScrollSmoother instance.
+ *
+ * This lives in its own client component so the root layout can stay a server
+ * component — otherwise `"use client"` at the layout level marks the entire
+ * tree as client and forfeits the `metadata` export.
+ */
+const SmoothScroll = ({ children }: { children: React.ReactNode }) => {
+  useGSAP(() => {
+    // Smooth scrolling hijacks the scrollbar, which is exactly what someone
+    // asking for reduced motion wants to avoid. It also breaks browser
+    // find-in-page and can trigger motion sickness.
+    const mm = gsap.matchMedia();
 
-export default function SmoothScroll({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const pathname = usePathname();
-  const content = useRef<HTMLDivElement>(null);
-  const instance = useRef<Lenis | null>(null);
-  useGSAP(
-    () => {
-      const mm = gsap.matchMedia();
-      mm.add(
-        "(pointer: fine) and (prefers-reduced-motion: no-preference)",
-        () => {
-          const lenis = new Lenis({
-            lerp: 0.1,
-            smoothWheel: true,
-            syncTouch: false,
-            anchors: { offset: -84 },
-            prevent: (node) =>
-              Boolean(node.closest("dialog, textarea, [data-native-scroll]")),
-          });
-          instance.current = lenis;
-          const tick = (time: number) => lenis.raf(time * 1000);
-          lenis.on("scroll", ScrollTrigger.update);
-          gsap.ticker.add(tick);
-          return () => {
-            gsap.ticker.remove(tick);
-            lenis.off("scroll", ScrollTrigger.update);
-            lenis.destroy();
-            instance.current = null;
-          };
-        },
-      );
-      let frame = 0;
-      let disposed = false;
-      const refresh = () => {
-        if (disposed) return;
-        cancelAnimationFrame(frame);
-        frame = requestAnimationFrame(() => {
-          instance.current?.resize();
-          ScrollTrigger.refresh();
-        });
-      };
-      const observer = new ResizeObserver(refresh);
-      if (content.current) observer.observe(content.current);
-      document.fonts.ready.then(refresh);
-      return () => {
-        disposed = true;
-        cancelAnimationFrame(frame);
-        observer.disconnect();
-        mm.revert();
-      };
-    },
-    { scope: content },
-  );
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      instance.current?.resize();
-      ScrollTrigger.refresh();
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      ScrollSmoother.create({
+        smooth: 1.5,
+        smoothTouch: 0.25,
+        effects: true,
+        // Skip the transform on elements that scroll past — ScrollSmoother
+        // otherwise keeps every data-speed target mounted in a layer.
+        normalizeScroll: true,
+      });
     });
-    return () => cancelAnimationFrame(frame);
-  }, [pathname]);
+
+    // Images and fonts settling after hydration shift every trigger position.
+    // One refresh once the page is fully loaded, rather than per-image.
+    const refresh = () => ScrollTrigger.refresh();
+
+    if (document.readyState === "complete") {
+      refresh();
+    } else {
+      window.addEventListener("load", refresh, { once: true });
+    }
+
+    return () => window.removeEventListener("load", refresh);
+  });
+
   return (
-    <ScrollContext.Provider
-      value={{
-        scrollTo: (top) => {
-          if (instance.current)
-            instance.current.scrollTo(top, { immediate: true });
-          else window.scrollTo({ top, behavior: "instant" });
-        },
-        lock: (locked) => {
-          if (locked) instance.current?.stop();
-          else instance.current?.start();
-        },
-      }}
-    >
-      <div ref={content} id="smooth-content">
-        {children}
-      </div>
-    </ScrollContext.Provider>
+    <div id="smooth-wrapper">
+      <div id="smooth-content">{children}</div>
+    </div>
   );
-}
+};
+
+export default SmoothScroll;

@@ -1,14 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { siteUrl } from "@/lib/site";
 
 import "./globals.css";
 
 import { Inter } from "next/font/google";
 
 import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import SmoothScroll from "@/components/SmoothScroll";
-import { TransitionProvider } from "@/components/TransitionLink";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,11 +16,8 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  title: {
-    default: "Azlhart® — Independent Creative Studio",
-    template: "%s — Azlhart®",
-  },
+  metadataBase: new URL("https://azlhart.com"),
+  title: "Azlhart® — Independent Creative Studio",
   description:
     "Independent creative studio shaping digital worlds with motion, precision, and bold expression. Branding, UI/UX design, and web development by Mario Daruranto.",
   keywords: [
@@ -65,16 +59,8 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${inter.className}`}>
       <body className="relative antialiased">
-        <a href="#main-content" className="skip-link">
-          Skip to content
-        </a>
-        <TransitionProvider>
-          <SmoothScroll>
-            <Navbar />
-            {children}
-            <Footer />
-          </SmoothScroll>
-        </TransitionProvider>
+        <Navbar />
+        <SmoothScroll>{children}</SmoothScroll>
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const DAY = 60 * 60 * 24;
+const YEAR = 60 * 60 * 24 * 365;
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
     // 3840px entry only buys oversized variants nobody requests.
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048],
     imageSizes: [48, 64, 96, 128, 256, 384],
-    minimumCacheTTL: DAY,
+    minimumCacheTTL: YEAR,
     remotePatterns: [
       { protocol: "https", hostname: "framerusercontent.com" },
       { protocol: "https", hostname: "thumbs.dreamstime.com" },
@@ -31,13 +31,12 @@ const nextConfig: NextConfig = {
       {
         // Without this, Lighthouse flags "Serve static assets with an efficient
         // cache policy" — Next only sets long-lived caching on /_next/static,
-        // not on anything served straight out of /public. These filenames are
-        // not content-hashed, so revalidate rather than marking them immutable.
+        // not on anything served straight out of /public.
         source: "/:all*(svg|jpg|jpeg|png|webp|avif|mp4|woff2|ico)",
         headers: [
           {
             key: "Cache-Control",
-            value: `public, max-age=${DAY}, must-revalidate`,
+            value: `public, max-age=${YEAR}, immutable`,
           },
         ],
       },

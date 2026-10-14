@@ -1,156 +1,139 @@
 "use client";
-import Link from "@/components/TransitionLink";
-import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { gsap, useGSAP } from "@/lib/gsap";
-import { useStudioScroll } from "./SmoothScroll";
-import ScrambleText from "./ScrambleText";
+
+import { useRef } from "react";
+
+import Link from "next/link";
+
+import { gsap, useGSAP, ScrollTrigger } from "@/lib/gsap";
+
 import LogoSVG from "./LogoSVG";
-const links = [
-  ["/about", "Studio"],
-  ["/services", "Services"],
-  ["/works", "Work"],
-  ["/archive", "Archive"],
-];
-export default function Navbar() {
-  const pathname = usePathname();
-  const scroll = useStudioScroll();
-  const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const { contextSafe } = useGSAP({ scope: dialog });
-  useEffect(() => {
-    // Browser Back can change the route while the dialog is open.
-    if (dialog.current?.open) {
-      gsap.killTweensOf(dialog.current);
-      dialog.current.close();
-      setOpen(false);
-      document.body.style.overflow = "";
-      scroll.lock(false);
-    }
-  }, [pathname, scroll]);
-  const close = contextSafe((immediate = false) => {
-    setOpen(false);
-    scroll.lock(false);
-    document.body.style.overflow = "";
-    const finish = () => {
-      dialog.current?.close();
-      button.current?.focus();
-    };
-    gsap.killTweensOf(dialog.current);
-    if (immediate || matchMedia("(prefers-reduced-motion: reduce)").matches)
-      finish();
-    else
-      gsap.to(dialog.current, {
-        clipPath: "inset(0 0 100% 0)",
-        duration: 0.4,
-        onComplete: finish,
+import CTA from "./CTA";
+import ScrambleText from "./ScrambleText";
+
+const Navbar = () => {
+  const navRef = useRef<HTMLElement>(null);
+  const logoRef = useRef<SVGSVGElement>(null);
+  const logoPathRef = useRef<SVGPathElement>(null);
+
+  const { contextSafe } = useGSAP(
+    () => {
+      // The navbar's entrance (#navbar, .fade-up-2, .fill-width) is sequenced
+      // by the hero's intro timeline, not here — those elements are supposed
+      // to arrive at a specific beat of that sequence.
+      const mm = gsap.matchMedia(navRef);
+
+      mm.add("(prefers-reduced-motion: reduce)", () => {
+        // No draw-on, but the wordmark still swaps in on scroll: while the hero
+        // is on screen it would sit directly on top of the hero's own header.
+        const wordmark = [logoPathRef.current, "#logo-link"];
+
+        ScrollTrigger.create({
+          trigger: "#hero-header",
+          start: "bottom top",
+          refreshPriority: -1,
+          onEnter: () => gsap.set(wordmark, { autoAlpha: 1, drawSVG: "100%" }),
+          onLeaveBack: () => gsap.set(wordmark, { autoAlpha: 0, drawSVG: 0 }),
+        });
       });
-  });
-  const show = contextSafe(() => {
-    dialog.current?.showModal();
-    setOpen(true);
-    scroll.lock(true);
-    document.body.style.overflow = "hidden";
-    gsap.killTweensOf(dialog.current);
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      gsap.fromTo(
-        dialog.current,
-        { clipPath: "inset(0 0 100% 0)" },
-        { clipPath: "inset(0 0 0% 0)", duration: 0.7 },
-      );
-      gsap.fromTo(
-        ".menu-link",
-        { y: 60, opacity: 0 },
-        {
-          y: 0,
-          opacity: 1,
-          duration: 0.7,
-          stagger: 0.07,
-          delay: 0.15,
-          overwrite: true,
-        },
-      );
-    } else gsap.set(dialog.current, { clipPath: "none" });
-  });
-  return (
-    <header className="site-nav">
-      <Link href="/" className="nav-brand" aria-label="Azlhart home">
-        azlhart<span>®</span>
-      </Link>
-      <nav aria-label="Main navigation" className="desktop-nav">
-        {links.map(([href, label]) => (
-          <Link
-            key={href}
-            href={href}
-            aria-label={label}
-            aria-current={pathname.startsWith(href) ? "page" : undefined}
-          >
-            <ScrambleText text={label} />
-          </Link>
-        ))}
-      </nav>
-      <Link href="/contact" className="nav-contact">
-        Let’s talk ↗
-      </Link>
-      <button
-        ref={button}
-        type="button"
-        className="menu-toggle"
-        aria-expanded={open}
-        aria-controls="mobile-menu"
-        onClick={() => (open ? close() : show())}
-      >
-        {open ? "Close −" : "Menu +"}
-      </button>
-      <dialog
-        ref={dialog}
-        className="menu-dialog"
-        aria-label="Explore Azlhart"
-        onCancel={(e) => {
-          e.preventDefault();
-          close();
-        }}
-      >
-        <div className="menu-dialog-top">
-          <span>AZLHART® / DIRECTORY</span>
-          <button type="button" onClick={() => close()} autoFocus>
-            Close −
-          </button>
-        </div>
-        <div className="menu-art" aria-hidden="true">
-          <LogoSVG />
-        </div>
-        <nav
-          id="mobile-menu"
-          aria-label="Mobile navigation"
-          className="menu-links"
-        >
-          {links.map(([href, label], i) => (
-            <Link
-              key={href}
-              href={href}
-              className="menu-link"
-              aria-current={pathname.startsWith(href) ? "page" : undefined}
-              onClick={() => close(true)}
-            >
-              <span>0{i + 1}</span>
-              {label}
-              <span>↗</span>
-            </Link>
-          ))}
-        </nav>
-        <div className="menu-dialog-bottom">
-          <span>
-            Independent creative studio
-            <br />
-            Kupang, Indonesia / UTC+8
-          </span>
-          <Link href="/contact" onClick={() => close(true)}>
-            Have a project in mind? ↗
-          </Link>
-        </div>
-      </dialog>
-    </header>
+
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        gsap.from([logoPathRef.current, "#logo-link"], {
+          scrollTrigger: {
+            trigger: "#hero-header",
+            start: "bottom top",
+            toggleActions: "play none none reverse",
+            // The navbar mounts above the hero it points at, so without an
+            // explicit priority ScrollTrigger refreshes it out of page order.
+            refreshPriority: -1,
+          },
+          duration: 0.75,
+          ease: "power4.inOut",
+          drawSVG: 0,
+          autoAlpha: 0,
+        });
+      });
+    },
+    { scope: navRef },
   );
-}
+
+  const handleLogoMouseEnter = contextSafe(() => {
+    gsap.to(logoRef.current, {
+      duration: 0.5,
+      ease: "power2.inOut",
+      fill: "#FFFFFF",
+      fillOpacity: 1,
+      overwrite: true,
+    });
+  });
+
+  const handleLogoMouseLeave = contextSafe(() => {
+    gsap.to(logoRef.current, {
+      duration: 0.5,
+      ease: "power2.inOut",
+      fillOpacity: 0,
+      overwrite: true,
+    });
+  });
+
+  return (
+    <nav
+      className="max-w-container desktop:top-8 tablet:px-6 custom-grid p-responsive invisible fixed top-[20px] left-1/2 z-50 w-full -translate-x-1/2 px-[20px] mix-blend-difference"
+      ref={navRef}
+      id="navbar"
+    >
+      {/* Logo */}
+      <Link
+        href="/"
+        onMouseEnter={handleLogoMouseEnter}
+        onMouseLeave={handleLogoMouseLeave}
+        id="logo-link"
+        aria-label="Azlhart home"
+        className="invisible"
+      >
+        <LogoSVG
+          refs={[logoRef, logoPathRef]}
+          strokeColor="#FFFFFF"
+          className="tablet:max-h-[48px] desktop:max-h-[64px] col-start-1 max-h-[32px]"
+        />
+      </Link>
+
+      {/* CTA */}
+      <div className="fade-up-2 tablet:col-end-13 tablet:order-last col-end-4 -translate-0.5 self-start">
+        <CTA text="let's talk" className="p-responsive" />
+      </div>
+
+      {/* Nav Links. prefetch is off because these routes do not exist yet —
+          Next was firing three 404 RSC requests on every page load. Drop the
+          prop once the pages are built. */}
+      <div className="tablet:flex desktop:col-start-7 desktop:col-end-auto desktop:justify-self-start col-span-3 col-end-8 hidden justify-end gap-x-11 self-start">
+        <div className="fade-up-2 flex items-center gap-x-6">
+          <span>01</span>
+          <Link href="/about" prefetch={false}>
+            <ScrambleText text="studio" />
+          </Link>
+        </div>
+        <div className="fade-up-2 flex items-center gap-x-6">
+          <span>02</span>
+          <Link href="/works" prefetch={false}>
+            <ScrambleText text="works" />
+          </Link>
+        </div>
+        <div className="fade-up-2 flex items-center gap-x-6">
+          <span>03</span>
+          <Link href="/archive" prefetch={false}>
+            <ScrambleText text="archive" />
+          </Link>
+        </div>
+      </div>
+
+      {/* Menu */}
+      <div className="tablet:hidden col-end-5 flex flex-col items-end gap-y-[6px] self-start">
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
+        <div className="fill-width h-[2px] w-6 rounded-full bg-white" />
+      </div>
+    </nav>
+  );
+};
+
+export default Navbar;

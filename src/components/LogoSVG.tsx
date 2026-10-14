@@ -31,7 +31,7 @@ const LogoSVG = ({
         stroke={strokeColor}
         strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke"
-        shapeRendering="geometricPrecision"
+        shapeRendering="crispEdges"
       />
     </svg>
   );
