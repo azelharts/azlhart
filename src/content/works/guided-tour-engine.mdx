@@ -1,0 +1,229 @@
+export const metadata = {
+  title: "A product tour engine without a library",
+  summary:
+    "How I built a declarative in-app tutorial engine that spotlights real UI, clicks and types for the user, and runs on demo data, from scratch, because the product's dialogs, sticky toolbars and router kept breaking the usual tricks.",
+  context: "Enterprise mentoring platform",
+  role: "Frontend engineer",
+  stack: [
+    "Next.js 15",
+    "React 19",
+    "TypeScript",
+    "Zustand",
+    "framer-motion",
+    "Jest",
+  ],
+  year: "2026",
+  readingTime: "8 min read",
+  highlights: [
+    "A mentoring tool opened a few times a quarter needed tours that click, type and span routes, not just tooltips.",
+    "Tours are plain step arrays run by an in-house engine with a four-strip blocker and a scripted automator.",
+    "14 tours run on demo data with negative IDs, so a tutorial can never create, book or email anything real.",
+  ],
+};
+
+Nobody reads a manual for a tool they open a few times a quarter. If you want people to find their way around, the product has to teach itself.
+
+The product is a mentoring module inside a larger HR platform. Mentors and mentees schedule 1-on-1 sessions, record them, and get an AI-written report afterwards. Most users open it a few times a quarter, and a mentor's first session is often the first time they've seen the screens at all.
+
+So we wanted a guided tour on each page that points at the real buttons, fills in a real form, and walks through a recording and a report. I built the tour engine and every tour in it. There are 14 tours now, one or more per page, split by role.
+
+In this article, I'll walk you through why I didn't use a library, how the engine is put together, and the tricky bits it took to make a tour that actually acts on the page.
+
+## Why not a library?
+
+Off-the-shelf tour libraries handle the common case well: dim the page, cut a hole around an element, show a tooltip, "Next". This product needed several things beyond that:
+
+- **Tours that act.** The scheduling tour opens a dialog, types into the form, picks a mentee from a combobox and submits. A tooltip that says "now fill in the form" isn't the same thing.
+- **Tours that span routes.** The recording tour starts on a list page and ends on a session page that doesn't exist for a new user.
+- **No real data touched.** A tutorial must not create a session, book a calendar slot or email anyone.
+- **Targets inside hostile layouts.** Radix dialogs, sticky toolbars, transformed cards, scroll areas inside dialogs.
+
+Each of these meant overriding a library. A library worked around in four places costs more than a small engine you own.
+
+Here's how the pieces described below fit together:
+
+<Flow
+  caption="How a page becomes a running tour"
+  nodes={[
+    { id: "page", label: "Current page", note: "path, role, flags" },
+    { id: "provider", label: "Tour provider", note: "skips seen tours" },
+    { id: "steps", label: "Step array", note: "plain data" },
+    { id: "fixtures", label: "Demo fixtures", note: "negative IDs" },
+    { id: "auto", label: "Automator", note: "click, type, wait" },
+    { id: "overlay", label: "Spotlight overlay", note: "four-strip blocker" },
+  ]}
+  layout={[
+    ["page", "provider", "steps"],
+    ["fixtures", "auto", "overlay"],
+  ]}
+  edges={[
+    ["page", "provider"],
+    ["provider", "steps", "picks tour"],
+    ["steps", "overlay", "highlight"],
+    ["steps", "auto", "automation"],
+    ["page", "fixtures", "tour active"],
+  ]}
+/>
+
+## Steps are data
+
+Let's start with the shape of a tour. A tour is an array of steps, each with a type and a handful of flags:
+
+```ts
+type StepType =
+  | "highlight"
+  | "cursor-click"
+  | "form-fill"
+  | "automation"
+  | "navigate";
+
+interface Step {
+  id: string;
+  type: StepType;
+  target?: string; // matches [data-tour="..."]
+  isClickable?: boolean; // let the user click the real element
+  autoAdvance?: boolean;
+  hideTooltip?: boolean; // spotlight only, nudge the user to click
+  goBackIfMissing?: boolean;
+  goBackToStepId?: string; // recover after a refresh closed a popover
+  formFill?: FormFillConfig;
+  automation?: { actions: AutomationAction[] };
+}
+```
+
+Notice that `target` points at a `data-tour` attribute rather than a CSS selector. Class names change with every styling pass. A `data-tour` attribute is a contract that says "a tour depends on this", and anyone renaming the element can see it.
+
+### Picking and persisting a tour
+
+A provider picks the tour from the current pathname, the user's role and permissions, and backend flags that can switch a tour off. The store is a small Zustand slice, and the split in what it persists took a few attempts to get right:
+
+- **Seen flags** go in `localStorage`. They outlive the browser session, so a finished tour doesn't come back.
+- **The active run** (tour, step index, role, the IDs it is working with) goes in `sessionStorage` through `partialize`, so a client-side navigation or a refresh keeps the tour where it was.
+- **The welcome dialog is deliberately not persisted.** After a refresh, auto-detection runs again and offers the tour again if it hasn't been seen.
+- **The completion dialog is persisted.** The last steps of some tours run on demo-only routes, like a session with ID `-1`. Refresh on that page with the completion dialog closed and the user would be stuck on a page that doesn't exist, with no active tour and no button leading off it. Persisting the dialog keeps the way out.
+
+Seen flags are per tour ID, which caused one leak. The mentor and mentee views of one page shared a single ID, so dismissing the tour as a mentee also silenced it on the mentor view. They're separate tours now, each with its own flag.
+
+## Building the overlay
+
+The spotlight is one `div` with a huge box-shadow, `0 0 0 99999px`, and the dimming is that shadow. framer-motion's `layout` animation with a spring moves it from one target to the next.
+
+It re-measures the target every animation frame, because these pages shift under it: data loads, accordions open, fonts swap. A `MutationObserver` waits for targets that haven't mounted yet, and disconnects once the target appears.
+
+### Clickable steps can't use z-index
+
+On a clickable step, the user has to press the real button while everything else stays blocked. The textbook approach is a full-screen blocker with the target raised above it by `z-index`.
+
+That fails whenever the target sits inside a stacking context. A button in a `sticky z-20` toolbar, or in a card with a `transform`, has its z-index scoped to that ancestor. It can't rise above anything outside it, whatever value you give it.
+
+So the blocker isn't one element. It's four fixed strips around the target, leaving a hole the real element shows through:
+
+```ts
+function blockerStrips(r: Rect) {
+  const top = Math.max(0, r.top);
+  const left = Math.max(0, r.left);
+  const right = Math.max(0, r.left + r.width);
+  const bottom = Math.max(0, r.top + r.height);
+  const height = bottom - top;
+  return [
+    { top: 0, left: 0, right: 0, height: top }, // above
+    { top: bottom, left: 0, right: 0, bottom: 0 }, // below
+    { top, left: 0, width: left, height }, // left
+    { top, left: right, right: 0, height }, // right
+  ];
+}
+```
+
+The strips use opposing offsets (`top` plus `bottom`) instead of explicit sizes, so they follow viewport resizes on their own. And since nothing has to be raised, the target's stacking context no longer matters.
+
+### Spotlighting only what's visible
+
+A target taller than the scroll area that contains it, like a panel inside a profile dialog, used to get a spotlight that ran past the dialog's edge. The rect is now cut down to the intersection of every ancestor that clips it (`overflow` set to `auto`, `scroll`, `hidden` or `clip`), and its top edge is pushed below any fixed or sticky page header. A target inside a dialog skips the header inset, since the dialog sits above the header.
+
+Walking ancestors and reading computed styles on every frame would force a style recalculation for each ancestor. So the list of clipping ancestors and pinned headers is looked up once per target element and cached in a `WeakMap`.
+
+After that, each frame only calls `getBoundingClientRect` on a few elements, and a target that leaves the DOM drops out of the cache by itself.
+
+## Tours that act
+
+This is where it gets interesting: making the tour do things on the page, not just point at them.
+
+### An automation script
+
+Automation steps run a short script: `click`, `wait`, `wait-for-element`, `move-cursor`, `scroll-to`, `navigate`. Selectors can include runtime values such as the ID of the demo session the tour just "created". Two details made it reliable.
+
+The first is **a generation counter**. If the user skips a step while a script is halfway through, the script must stop, not click something on the next step's page. Every run takes a number, and every await checks it:
+
+```ts
+const gen = useRef(0);
+
+async function runScript(actions: Action[]) {
+  const mine = ++gen.current;
+  for (const action of actions) {
+    if (gen.current !== mine) return; // step changed underneath us
+    await perform(action, () => gen.current !== mine);
+  }
+}
+```
+
+Notice that `perform` also receives the check, so an action can ask "am I still current?" too, not just the loop between actions.
+
+The second is **a full click**. `element.click()` alone doesn't open Radix menus and popovers, because they listen for pointer events. The automator sends `pointerdown`, `mousedown`, `pointerup`, `mouseup`, then `click`, the same order a real click produces.
+
+### Typing into React-controlled inputs
+
+Setting `input.value = "..."` on a controlled input does nothing that React can see. React tracks the value through the property setter, so the form state never changes. The form filler calls the native setter from the prototype and then dispatches the events React listens for:
+
+```ts
+function setNativeValue(el: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  setter ? setter.call(el, value) : (el.value = value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+}
+```
+
+Going through the prototype's setter is what lets React notice the change, and the bubbling `input` and `change` events push it into the form state.
+
+Text is typed one character at a time with a jittered 50 to 80 ms delay, so it reads as typing rather than a value appearing all at once. Comboboxes pick their option through a `data-tour-value` attribute. Popover time pickers are driven by clicking their trigger, because their trigger is a button and calling the input setter on it throws. If a popover doesn't close, an Escape keypress is the fallback.
+
+Abort flags live in refs, so React StrictMode's double-mounted effects don't leave two fillers typing into one field.
+
+## Demo data, never real data
+
+While a tour is active, the pages read fixtures instead of queries, and the real queries are disabled. Every fixture ID is negative: mentee `-1`, session `-1`, a "created" session `-10`.
+
+A negative ID can never match a database row. Even if something slipped through to the API, it would hit nothing.
+
+## The navigation that silently didn't happen
+
+The hardest bug wasn't in the tour code. The recording and report tours on the newer pages never reached their demo page. The first step did a `router.push` to the demo URL and nothing happened. There was no error, and the tour carried on as if the push had worked.
+
+The cause was a guard elsewhere. In the same render the tour navigated, a prevent-unload hook armed itself by pushing a history entry with `null` state, so the back button could be intercepted.
+
+Next 15 patches `history.pushState`. A push without Next's own state is treated as a RESTORE of the current URL, and the router's action queue discards any navigation still pending when a RESTORE arrives. The guard's push cancelled the tour's push.
+
+The fix was one argument: push `window.history.state`, which carries Next's internal marker, instead of `null`. Next hands that to the browser unchanged, and the pending navigation survives.
+
+Finding it took a long time. Fixing it took one line.
+
+### The double-click
+
+One smaller bug also cost a tour run: a fast double-click on **Next** called `next()` twice before React re-rendered. That skipped a clickable step and landed on a step whose target didn't exist yet, with no tooltip and no way forward.
+
+A short cooldown on the button fixed it. Automation steps advance through a separate path that skips the cooldown, so a script that finishes quickly isn't swallowed.
+
+## Wrapping up
+
+Here's what I'd keep from this engine:
+
+- **Keep steps as data.** Every tour is a plain array, so a new tour is a new file of steps, not new engine code, and the step definitions can be tested without rendering a page.
+- **Keep the four-strip blocker.** It works in every stacking context the product has, and it's about 15 lines.
+- **Keep negative IDs.** It's the cheapest safety guarantee in the feature.
+
+What I'd do differently: I'd write the persistence rules down before the store, not after. Each change in what survives a refresh came from a bug report, and the reasons are now in comments rather than in a design.
+
+The same pages also record sessions in the browser, and that recorder had its own timing problems, covered in [the recording that stopped itself](/works/hardening-a-shared-recorder). Have fun building your own tours.

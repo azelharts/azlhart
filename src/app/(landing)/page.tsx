@@ -1,24 +1,20 @@
-import HeroSection from "./HeroSection";
-import AboutSection from "./AboutSection";
-import ServiceSection from "./ServiceSection";
-import WorkSection from "./WorkSection";
-import ProcessSection from "./ProcessSection";
-import FAQSection from "./FAQSection";
-import TestimonialSection from "./TestimonialSection";
-import FrameSection from "./FrameSection";
+import { getWorks } from "@/lib/works";
 
-const Home = () => {
+import HeroSection from "./HeroSection";
+
+// The landing page is the hero and nothing else. Everything else lives
+// under /works.
+const Home = async () => {
+  const works = await getWorks();
+
   return (
-    <main className="flex flex-col gap-y-20">
-      <HeroSection />
-      <AboutSection />
-      <ServiceSection />
-      <WorkSection />
-      <ProcessSection />
-      <FAQSection />
-      <FrameSection />
-      <TestimonialSection />
-      <section className="h-screen w-full" />
+    <main>
+      <HeroSection
+        works={works
+          .slice(0, 7)
+          .map(({ slug, index, title }) => ({ slug, index, title }))}
+        total={works.length}
+      />
     </main>
   );
 };

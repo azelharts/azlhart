@@ -17,6 +17,7 @@ import { SplitText } from "gsap/SplitText";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
 import { ScrambleTextPlugin } from "gsap/ScrambleTextPlugin";
 import { CustomEase } from "gsap/CustomEase";
+import { Flip } from "gsap/Flip";
 
 gsap.registerPlugin(
   useGSAP,
@@ -26,6 +27,7 @@ gsap.registerPlugin(
   DrawSVGPlugin,
   ScrambleTextPlugin,
   CustomEase,
+  Flip,
 );
 
 /** The site's signature ease. Created once; referenced everywhere by name. */
@@ -50,4 +52,5 @@ export {
   DrawSVGPlugin,
   ScrambleTextPlugin,
   CustomEase,
+  Flip,
 };

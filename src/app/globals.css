@@ -3,10 +3,15 @@
 :root {
   --background: #0a0a0a;
   --foreground: #ffffff;
+  /* The site is monochrome on purpose. "Accent" is plain white used as an
+     inversion: hover fills, the active filter, the reading bar. Variety comes
+     from texture (halftone, grain) and motion (scramble), not from colour. */
+  --accent: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-accent: var(--accent);
 
   --breakpoint-tablet: 834px;
   --breakpoint-desktop: 1256px;
@@ -97,4 +102,149 @@ span {
 
 .text-stroke {
   -webkit-text-stroke: 1px black;
+}
+
+/* ── Works ─────────────────────────────────────────────────────────────── */
+
+/* In the components layer so utilities (hover colours) can override it. */
+@layer components {
+  .article-label {
+    @apply text-xs font-light tracking-wide text-white/50;
+  }
+}
+
+/*
+ * The article body. MDX renders flat siblings, so each one is placed on the
+ * site's grid here. Prose, code, figures and tables all share one reading
+ * column, so the left edge never jumps while reading.
+ */
+.article-body {
+  @apply tablet:grid-cols-8 desktop:grid-cols-12 desktop:gap-x-9 grid grid-cols-4 gap-x-8 gap-y-6;
+}
+
+.article-body > * {
+  @apply tablet:col-span-6 tablet:col-start-2 desktop:col-span-6 desktop:col-start-4 col-span-full min-w-0;
+}
+
+.article-body :where(p, li) {
+  @apply tablet:text-lg text-base leading-[165%] font-light text-white/80;
+}
+
+.article-body :where(strong) {
+  @apply font-semibold text-white;
+}
+
+.article-body > h2 {
+  @apply tablet:text-3xl mt-16 text-2xl leading-[115%] uppercase;
+}
+
+.article-body > h3 {
+  @apply tablet:text-xl mt-8 text-lg leading-[125%] font-semibold;
+}
+
+.article-body :where(ul, ol) {
+  @apply flex flex-col gap-y-3 pl-5;
+}
+
+.article-body :where(ul) {
+  @apply list-[square];
+}
+
+.article-body :where(ol) {
+  @apply list-decimal;
+}
+
+.article-body li::marker {
+  @apply text-white/40;
+}
+
+.article-body a {
+  @apply font-normal underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-white;
+}
+
+.article-body > blockquote {
+  @apply border-l border-white/25 pl-6 italic;
+}
+
+.article-body > hr {
+  @apply my-8 border-white/15;
+}
+
+/* Inline code only. Fenced blocks are handled by rehype-pretty-code below. */
+.article-body :not(pre) > code {
+  @apply rounded-sm bg-white/10 px-1.5 py-0.5 font-mono text-[0.875em] text-white;
+}
+
+.article-body figure[data-rehype-pretty-code-figure] {
+  @apply border border-white/15 bg-white/[0.03];
+}
+
+.article-body figure[data-rehype-pretty-code-figure] pre {
+  @apply tablet:text-sm overflow-x-auto py-5 font-mono text-xs leading-[175%];
+}
+
+.article-body figure[data-rehype-pretty-code-figure] [data-line] {
+  @apply px-5;
+}
+
+.article-body figure[data-rehype-pretty-code-figure] span {
+  @apply leading-[inherit];
+}
+
+.article-body [data-rehype-pretty-code-title] {
+  @apply border-b border-white/15 px-5 py-3 font-mono text-xs text-white/50;
+}
+
+.article-callout {
+  @apply tablet:grid-cols-[120px_1fr] grid gap-4 border-y border-white/25 py-6;
+}
+
+.article-callout p {
+  @apply !text-white;
+}
+
+.article-stats {
+  @apply tablet:grid-cols-3 grid grid-cols-2 gap-px border border-white/15 bg-white/15;
+}
+
+.article-stats > div {
+  @apply flex flex-col gap-y-4 bg-[var(--background)] p-5;
+}
+
+.article-stats dd {
+  @apply tablet:text-4xl text-2xl;
+}
+
+.article-diagram {
+  @apply flex flex-col gap-y-3;
+}
+
+.article-diagram pre {
+  @apply tablet:text-sm overflow-x-auto border border-white/15 p-5 font-mono text-xs leading-[150%] text-white/80;
+}
+
+/* Block on narrow screens so a wide table scrolls instead of the page. */
+.article-body > table {
+  @apply max-tablet:block max-tablet:overflow-x-auto w-full border-collapse text-left text-sm;
+}
+
+.article-body th {
+  @apply border-b border-white/25 py-3 pr-4 text-xs font-light tracking-wide text-white/50;
+}
+
+.article-body td {
+  @apply border-b border-white/10 py-3 pr-4 align-top font-light text-white/80;
+}
+
+.article-body figure[data-rehype-pretty-code-figure] {
+  @apply relative;
+}
+
+.code-copy {
+  @apply absolute top-3 right-3 border border-white/20 bg-[var(--background)] px-2.5 py-1 font-mono text-[11px] font-normal text-white/60 transition-colors hover:border-white hover:text-white;
+}
+
+/* Diagrams sit in the reading column like any other block. */
+.article-flow {
+  @apply flex flex-col;
 }

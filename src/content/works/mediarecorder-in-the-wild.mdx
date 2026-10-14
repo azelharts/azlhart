@@ -1,0 +1,200 @@
+export const metadata = {
+  title: "Everything that goes wrong with a browser recording",
+  summary:
+    "Microphones that vanish without an event, shared tabs that drop their audio, laptops that sleep mid-sentence and browsers that pass every feature check yet record garbage. Here's how the coaching recorder notices each one and stops honestly.",
+  context: "Enterprise talent platform",
+  role: "Frontend engineer",
+  stack: [
+    "Vue 3",
+    "TypeScript",
+    "MediaRecorder",
+    "Web Audio",
+    "Wake Lock API",
+    "Vitest",
+  ],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "Microphones, shared tabs and sleeping laptops fail mid-session, often without firing any event.",
+    "Mutes, timestamp gaps and capability probes feed one handler that stops without finalising.",
+    "Saved chunks stay recoverable, and the status on screen always matches what the recorder is doing.",
+  ],
+};
+
+Recording audio in a browser is easy in a demo. Recording it for 45 minutes on a real office laptop is a different story. Headsets get swapped, permissions get revoked, the meeting tab gets closed and the lid gets shut on the way to the next room.
+
+The product here is a talent-management system for a large state-owned enterprise. Its 1-on-1 workspace records coaching sessions in the browser, either in person through the laptop microphone or online by capturing the audio of the meeting tab, and an AI pipeline turns that audio into a report for the employee's development plan.
+
+The [previous article](/works/crash-safe-recorder) covered how the audio gets to disk safely. In this one, let's take a look at the environment around it. Each case below came up in QA or in my own testing, and a few of them fire no event at all.
+
+The goal every time is the same: notice it, stop **without finalising**, keep the saved chunks, and tell the user exactly what happened.
+
+## When the microphone goes away
+
+The textbook signal for a lost microphone is the track's `ended` event. It's reliable when it fires, but it doesn't always fire:
+
+- **Unplugging a USB mic** on Chrome for Windows often only _mutes_ the track. `ended` never comes.
+- **Revoking the permission** in the site settings also only mutes the track. The device is still connected, so nothing else changes either.
+- **Connecting a Bluetooth headset** mutes the track for a moment and then unmutes it. That one must _not_ end the session.
+
+So we need three detection paths, and they all lead to one place:
+
+1. `ended` on the audio track.
+2. `devicechange` on `navigator.mediaDevices`, followed by `enumerateDevices()`. The event doesn't say which device left, so the recorder notes the `deviceId` from `track.getSettings()` when the stream starts and checks whether it's still in the list.
+3. `mute` on the track, with a 1.5-second grace timer that `unmute` cancels. If the track is still muted when the timer fires, the microphone is gone.
+
+Here's how the three paths meet:
+
+<Flow
+  caption="Three detectors, one exit path"
+  nodes={[
+    { id: "ended", label: "Track ended", note: "textbook signal" },
+    { id: "device", label: "Device gone", note: "devicechange check" },
+    { id: "mute", label: "Track muted", note: "1.5 s grace" },
+    { id: "handler", label: "handleMicLost()", note: "one exit path" },
+    { id: "stop", label: "Stop and release", note: "no finalising" },
+    { id: "state", label: "mic_lost state", note: "chunks recoverable" },
+  ]}
+  layout={[
+    ["ended", "device", "mute"],
+    ["handler", "stop", "state"],
+  ]}
+  edges={[
+    ["ended", "handler"],
+    ["device", "handler"],
+    ["mute", "handler", "still muted"],
+    ["handler", "stop"],
+    ["stop", "state"],
+  ]}
+/>
+
+Here's what the mute path and the shared handler look like:
+
+```ts
+function onMicMuted() {
+  if (!isLive() || graceTimer) return;
+  graceTimer = setTimeout(() => {
+    graceTimer = null;
+    const track = micStream?.getAudioTracks()[0];
+    if (!track || track.muted) handleMicLost();
+  }, MUTE_GRACE_MS);
+}
+
+function handleMicLost() {
+  if (!isLive()) return;
+  if (recorder?.state !== "inactive") recorder.stop();
+  stopClock();
+  releaseDevices();
+  transition("MIC_LOST"); // not "completed": chunks stay recoverable
+  saveMeta();
+}
+```
+
+Notice that none of the detectors stops the recorder itself; only `handleMicLost()` does. With three paths firing in any order, the second and third calls simply see a session that is no longer live and return.
+
+One trap in step 2: `getSettings()` isn't implemented on every `MediaStreamTrack`. Without a guard, an older browser would have failed the whole recorder at start.
+
+## Recording the other side in online mode
+
+An online session needs two sources: the microphone, and the meeting tab's audio from `getDisplayMedia`, mixed with Web Audio into one stream. Two things went wrong here.
+
+**The user shares a tab without ticking "Share audio".** `getDisplayMedia` succeeds with only a video track. So the recorder checks for an audio track straight away. If there isn't one, it stops the shared tracks **immediately** (so the browser's "sharing this tab" indicator disappears), releases the microphone and raises a clear error.
+
+**Total silence from a sample-rate mismatch.** Chrome captures tab audio at 48 kHz. `new AudioContext()` opens at the device's own rate, which on many laptops is 44.1 kHz. Mixing sources at different rates in that setup produced complete silence, while the microphone path still sounded fine in testing.
+
+The fix is to open the context at the system track's rate. I used the mixer from an in-house audio package rather than my own graph for exactly this reason, because it already does that.
+
+## Handling a shared tab that stops mid-session
+
+Halfway through a call, someone closes the meeting tab or presses "Stop sharing". The recorder could carry on with the microphone alone, but the product decision was clear: half a recording without the other person's voice is useless, and nobody would find out until the report came back wrong.
+
+So the recorder **pauses automatically** and asks the user to share the tab again. Getting that pause right took several fixes, most of them from QA:
+
+- **Stop the leftover share.** The video track was still alive, so Chrome kept showing "This tab is sharing your screen". The remaining display tracks are now stopped as soon as the audio goes.
+- **Drain before pausing.** `MediaRecorder.pause()` doesn't flush its buffer. Whatever was recorded since the last three-second chunk only comes out on the next `stop()`, and by then the session may have a new epoch and the chunk gets discarded as stale. Calling `requestData()` before `pause()` saves those seconds.
+- **Save the duration at the moment of pausing.** Otherwise the stored value lagged by up to one tick, and the clock jumped back by up to three seconds on resume.
+- **Resume means re-share.** After a tab-audio loss the only way on is "Share screen again", which requests a new stream with audio.
+- **Wake the mix up.** A tab in the background can suspend its `AudioContext`. On resume the recorder calls `audioContext.resume()`, otherwise the mix stays silent.
+
+And when `pause()` isn't supported at all, which happens on some engines, the recorder does **not** pretend. The status stays "recording", because it still is, and the user sees a warning that only the microphone is being captured.
+
+A "paused" label over a live microphone would be the most dangerous lie in the whole flow.
+
+## Detecting a sleep that fires no event
+
+Closing a laptop lid sends nothing to the page. On wake, `MediaRecorder` carries on as if nothing happened, the clock jumps forward by the length of the sleep, and that stretch holds no audio.
+
+All that's left are traces in the timestamps, so the recorder reads three of them. Let's look at the check:
+
+```ts
+const TICK_GAP_MS = 90_000; // between clock ticks
+const CHUNK_GAP_MS = 15_000; // between audio chunks
+const CLOCK_DRIFT_MS = 60_000; // wall clock ahead of monotonic
+
+function looksLikeSleep(wallGapMs: number, monoGapMs: number, limitMs: number) {
+  if (!Number.isFinite(wallGapMs) || !Number.isFinite(monoGapMs)) return false;
+  return monoGapMs > limitMs || wallGapMs - monoGapMs > CLOCK_DRIFT_MS;
+}
+```
+
+Each threshold has a reason behind it:
+
+- **The tick gap** has to be above 90 seconds. Chrome throttles timers in hidden tabs to about once a minute, and an online session normally runs with the meeting in another tab. A tighter limit would read every online session as a sleep.
+- **The chunk gap** is the most direct sign. Chunks arrive every three seconds and aren't throttled the way timers are. Without this check, closing a MacBook Air lid for about 30 seconds went unnoticed in my own testing.
+- **The clock drift** covers systems where the monotonic clock stops during sleep, so neither gap looks large but the wall clock has jumped ahead.
+
+The first version compared gaps on `Date.now()`. Review pointed out that a forward step of the system clock (from NTP, a VM sync or a manual change) would then look like a sleep and stop a healthy recording. The gaps are now measured on `performance.now()`, which clock changes don't move. The drift threshold went from 15 to 60 seconds, well above a normal correction.
+
+On a sleep, the recorder stops without finalising, ends the clock at the **last awake tick** so sleep time isn't counted, and the recovery dialog says the device went to sleep. The gaps reset on start, resume and recovery, so a pause is never mistaken for one.
+
+## Gating on what the browser can actually do
+
+Some browsers can't record properly, and it's better to say so before a session starts than after it's over. The gate is a pure function over a probe (user agent, plus booleans for `MediaRecorder`, `getUserMedia` and `getDisplayMedia`) passed in by the caller, so every combination is testable without stubbing globals.
+
+It answers _can this browser record at all_ and _can it record online_ separately, because the answers differ. Feature detection comes first; user-agent checks appear only where an API is present but lies:
+
+- **Firefox** has `getDisplayMedia`, so a `typeof` check passes. But it ignores `audio: true` and returns a stream with no audio track. In-person recording works; online mode is disabled with a tooltip.
+- **Safari** passes every API check, then produces broken recordings: its `dataavailable` blobs are cumulative instead of incremental, and blobs stored in IndexedDB can read back as 0 bytes. Both fail silently at upload time, after the session has already happened. Safari is blocked outright.
+
+Here's the check that spots a Safari-like engine:
+
+```ts
+function isSafariLike(ua: string) {
+  if (/iPhone|iPad|iPod/.test(ua)) return true; // platform first
+  if (/Edg|OPR|Opera/.test(ua)) return false;
+  if (/Chrome|Chromium|Firefox/.test(ua)) return false;
+  return /Safari/.test(ua);
+}
+```
+
+The order matters twice. Chrome, Edge and Opera all include "Safari" in their user agents, so the specific tokens are checked first. And every browser on iOS uses WebKit, so it has Safari's limits.
+
+That's why the platform check comes before the vendor tokens. Edge on iOS reports `EdgiOS`, which contains "Edg", and would otherwise be waved through to feature detection, where every check passes. Without a `navigator` at all, the gate fails closed.
+
+## Leaving the page, honestly
+
+The last group of guards deals with the page itself:
+
+- **Wake lock.** A screen wake lock keeps the display on, and is re-acquired on `visibilitychange` because the browser drops it when the tab is hidden. One race: if the component was torn down while `wakeLock.request()` was pending, the lock arrived afterwards and was never released. The code now re-checks a `disposed` flag after the `await`.
+- **Two kinds of leaving.** `beforeunload` covers refresh and closing the tab, but never fires for navigation inside a single-page app, so in-app links go through a router leave guard with a confirm dialog. Back is caught by pushing one extra history entry, and that push **spreads the existing `history.state`**: vue-router keeps its own bookkeeping there, and overwriting it broke later navigation.
+- **Network status.** Recording doesn't need the network, so offline and slow connections (from `effectiveType` and `downlink` where available) only show a toast saying the audio is safe on this device.
+
+The copy rule is written down in the code: the dialog says the recording **is paused and can be resumed**, not that it **will be lost**. A false data-loss warning makes people afraid of a feature built to survive interruptions, and once they catch one, they stop trusting the real ones.
+
+<Callout label="lesson">
+  The browser doesn't always tell you something went wrong. A muted track, a
+  missing audio track or a gap between timestamps is often the only signal
+  you'll get, so the recorder has to look for those directly.
+</Callout>
+
+## Wrapping up
+
+We covered a lot of ground: three ways to lose a microphone, a tab share without audio, a sample-rate mismatch, an automatic pause, a sleep detector built on timestamps, a browser gate, and the guards around leaving the page. The patterns I'd keep:
+
+- **One exit path per failure.** Many detectors, one handler. That's what kept three overlapping microphone signals from fighting each other.
+- **Pure functions for browser judgement calls.** The capability gate, the sleep check and the connection classifier take plain inputs and return plain answers. That's where the edge cases got tested, not in a component.
+- **Status that matches reality.** If pause fails, don't say "paused". If the page is left, say "paused", not "lost".
+
+What I'd do differently is start with a matrix of real devices and browsers instead of discovering the cases one QA round at a time. Most of these fixes came from someone doing something ordinary with their laptop.
+
+Once a session has been interrupted and resumed, the audio on disk is several recordings glued together. The [next article](/works/webm-remuxer) is about turning those into one file a player can actually play. See you there.

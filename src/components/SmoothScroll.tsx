@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+
 import { useGSAP, ScrollSmoother, ScrollTrigger, gsap } from "@/lib/gsap";
 
 /**
@@ -10,6 +12,20 @@ import { useGSAP, ScrollSmoother, ScrollTrigger, gsap } from "@/lib/gsap";
  * tree as client and forfeits the `metadata` export.
  */
 const SmoothScroll = ({ children }: { children: React.ReactNode }) => {
+  const pathname = usePathname();
+
+  // The smoother outlives client-side navigation, but the page under it does
+  // not: start each route at the top and re-measure every trigger against the
+  // new content height.
+  useGSAP(
+    () => {
+      ScrollSmoother.get()?.scrollTop(0);
+      window.scrollTo(0, 0);
+      ScrollTrigger.refresh();
+    },
+    { dependencies: [pathname] },
+  );
+
   useGSAP(() => {
     // Smooth scrolling hijacks the scrollbar, which is exactly what someone
     // asking for reduced motion wants to avoid. It also breaks browser

@@ -1,0 +1,251 @@
+export const metadata = {
+  title: "One blacklist, five places it has to show up",
+  summary:
+    "How I built a candidate blacklist for a multi-tenant hiring dashboard: one modal for single and bulk actions, mandatory reasons, an audit timeline, and a cache that has to agree with itself across five screens.",
+  context: "Career & hiring platform",
+  role: "Frontend engineer",
+  stack: [
+    "React 18",
+    "TypeScript",
+    "TanStack Query",
+    "TanStack Table",
+    "Zod",
+    "Jotai",
+  ],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "A blacklisted candidate had to show up consistently across five screens of a multi-tenant hiring dashboard.",
+    "One modal with create, edit and remove modes sends every action as a batch, with a reason required.",
+    "Each mutation invalidates every affected cache and resets the paginated list so its pages never shift.",
+  ],
+};
+
+The product is a career platform with three faces: a learning side with courses and exams, a job portal where candidates apply, and a hiring dashboard that enterprise partners use to post vacancies, screen applicants and keep a talent pool. Each partner gets its own careers site, and behaviour is switched per tenant by a `features` config the server delivers at startup.
+
+One partner asked for a blacklist: a way to flag a candidate so that no recruiter on the team moves them forward by accident. The rule itself is simple. The hard part was that a blacklist is only useful if it shows up **everywhere a recruiter might meet that candidate**, and it has to show up consistently.
+
+In this article, I'll walk you through how I kept that one fact in agreement across five screens: the batch-first API calls, a single modal with three modes, the cache invalidation that needed a hotfix, and the follow-ups that showed me what I'd missed.
+
+## The problem: five surfaces, one fact
+
+When I mapped it out, "this person is blacklisted" had to appear in five places:
+
+- the **candidate table** of each vacancy, for one candidate or a bulk selection;
+- the **talent pool cards**, which got a greyed header and a `BLACKLISTED` badge;
+- the **profile drawer** that slides over any list, with different buttons depending on context;
+- the full **candidate profile**, with a history of every change;
+- a new **View Blacklist** page to search, edit and remove entries.
+
+On top of that, every create, edit and removal needs a reason, the whole thing sits behind a per-tenant flag, and logged-out visitors to a public profile must never trigger a blacklist request.
+
+The feature shipped as one PR of about 1,800 lines across 31 files, followed by five small hotfixes in the next two days.
+
+Here's how one action reaches all five:
+
+<Flow
+  caption="One modal, every surface refreshed"
+  nodes={[
+    { id: "table", label: "Vacancy table", note: "single or bulk" },
+    { id: "modal", label: "Blacklist modal", note: "three modes" },
+    { id: "api", label: "/blacklists/batch", note: "array of ids" },
+    { id: "drawer", label: "Profile drawer" },
+    { id: "invalidate", label: "Invalidate queries", note: "profiles, pool" },
+    { id: "reset", label: "Reset blacklist list", note: "infinite query" },
+  ]}
+  layout={[
+    ["table", "modal", "api"],
+    ["drawer", "invalidate", "reset"],
+  ]}
+  edges={[
+    ["table", "modal", "via atom"],
+    ["drawer", "modal", "via atom"],
+    ["modal", "api", "batch"],
+    ["api", "invalidate"],
+    ["api", "reset"],
+  ]}
+/>
+
+## Working with a batch-first API
+
+Let's start with the API. The backend exposed batch endpoints: `POST`, `PATCH` and `DELETE` on a `/blacklists/batch` route, each taking an array of ids. I leaned into that on the client. There is no "blacklist one candidate" call. A single action is a batch of one.
+
+Here's what the client layer looks like:
+
+```ts
+type CreateRequest = { user_ids: number[]; reasons: string[] };
+type UpdateRequest = { ids: number[]; reasons: string[] };
+type RemoveRequest = { ids: number[]; delete_reasons: string[] };
+
+const createEntries = (data: CreateRequest) =>
+  request({ url: `${BLACKLISTS}/batch`, method: "POST", data });
+const updateEntries = (data: UpdateRequest) =>
+  request({ url: `${BLACKLISTS}/batch`, method: "PATCH", data });
+const removeEntries = (data: RemoveRequest) =>
+  request({ url: `${BLACKLISTS}/batch`, method: "DELETE", data });
+```
+
+Notice the asymmetry. Creating a blacklist works on **user** ids, because the person isn't on the list yet. Editing and removing work on **blacklist record** ids. That difference ended up shaping the modal.
+
+## One modal, three modes
+
+Because single and bulk actions are the same call, one modal serves both. It takes a list of candidates and a `mode` of `create`, `edit` or `remove`, and the mode decides four things:
+
+|             | create              | edit              | remove            |
+| ----------- | ------------------- | ----------------- | ----------------- |
+| ids sent    | `user_id`           | record `id`       | record `id`       |
+| reason list | blacklist reasons   | blacklist reasons | removal reasons   |
+| field       | `reasons`           | `reasons`         | `delete_reasons`  |
+| copy        | "Confirm Blacklist" | "Save Changes"    | "Confirm Removal" |
+
+The predefined reasons aren't constants in the frontend. I first wrote them as a constants file, then moved them into the locale the server delivers, so each tenant can define its own list and translate it. Removal has its own list, because "they appealed and were cleared" isn't a reason to blacklist anyone.
+
+The modal is registered with the dashboard's central modal container, a Jotai atom that holds "which modal is open, with which data". The vacancy table's bulk action and the profile drawer both open it by writing to that atom. They get the same component, the same validation and the same cache handling without passing callbacks through three layers.
+
+### Making reasons required, one way or another
+
+A recruiter can tick predefined reasons, write a free-text one, or both. The rule is "at least one of those", which is a cross-field check. In Zod, that's a `refine` on the whole object:
+
+```ts
+const schema = z
+  .object({ reasons: z.array(z.string()), other: z.string().optional() })
+  .refine((d) => d.reasons.length > 0 || !!d.other?.trim(), {
+    message: "Select at least one reason or write your own",
+    path: ["reasons"],
+  });
+```
+
+The `path` puts the error under the checkbox group, where the recruiter is looking. On submit the free text is appended to the ticked reasons, and the backend stores one flat `string[]`.
+
+### Undoing that flattening on edit
+
+Editing a reason means prefilling the form from that flat array. The stored list doesn't say which strings came from checkboxes and which were typed. So the modal splits them by set membership against the current predefined list:
+
+```ts
+function splitReasons(stored: string[], predefined: readonly string[]) {
+  const known = new Set(predefined);
+  return {
+    checked: stored.filter((r) => known.has(r)),
+    other: stored.filter((r) => !known.has(r)).join(", "),
+  };
+}
+```
+
+Anything the tenant's list doesn't recognise becomes free text, including a reason that was removed from the list later. Nothing is lost; it just moves to the text box.
+
+## Keeping five caches honest
+
+After any mutation, every surface has to reflect it. The modal fans out:
+
+- invalidate the vacancy applicant lists;
+- invalidate each affected user's profile;
+- invalidate the blacklist history and the talent pool;
+- **reset** the paginated blacklist list.
+
+That last one was a hotfix, and it's worth slowing down for. The blacklist page uses `useInfiniteQuery`, driven by the API's `pagination.next_page`. I first invalidated it like everything else.
+
+Here's the catch: invalidating an infinite query refetches **every page already loaded**, one by one, with the old page boundaries. After removing a row from page one, every later page shifts by one, so the refetch shows one entry twice and drops another. `resetQueries` throws the pages away and starts again from page one, which is what a changed list needs.
+
+<Callout label="lesson">
+  An infinite list is a cache of page boundaries, not just of rows. When a
+  mutation can move those boundaries, refetching the old pages gives you a list
+  that is wrong in a way that looks right.
+</Callout>
+
+## Building the View Blacklist page
+
+The page is a TanStack Table over the flattened infinite query, with a debounced search box. A few details mattered.
+
+**Selection is keyed by record id.** `getRowId: (row) => String(row.id)` means a selection is stored by entry, not by row index. When infinite scroll appends the next page, the indices of loaded rows don't change, but this makes sure selection never depends on them.
+
+**Search starts a new selection.** A selection made under one query shouldn't silently carry over to results the recruiter can't see. A search change clears the selection and remounts the table by bumping a `key`, which also resets the table's internal state.
+
+**Bulk and per-row actions don't mix.** While anything is selected, each row's action menu is disabled. Otherwise "Remove" on one row while ten others are ticked is ambiguous.
+
+**Duration reads naturally.** The cell shows "3 months" and the tooltip shows the exact timestamp.
+
+**Names open the drawer.** The drawer is built around an _application_, but a blacklist entry isn't tied to one. Clicking a name fetches the candidate's latest application on demand and opens the drawer with job-specific fields blanked out, so the scoring and comment tabs that only make sense inside a vacancy stay hidden.
+
+## The audit timeline
+
+Every create, edit and removal is recorded by the backend, and the profile shows them as a vertical timeline. The component is driven by a config map from action type to icon, label and badge colour:
+
+```ts
+const ACTIONS = {
+  created: {
+    Icon: BanIcon,
+    label: "Blacklisted",
+    variant: "neutral-high-contrast",
+  },
+  updated: {
+    Icon: EditIcon,
+    label: "Edited blacklist reason",
+    variant: "neutral-surface",
+  },
+  removed: { Icon: BinIcon, label: "Removed from blacklist", variant: "error" },
+} as const;
+
+function reasonsOf(entry: HistoryEntry): string[] {
+  const raw =
+    entry.action_type === "removed"
+      ? (entry.changes.delete_reasons ?? entry.changes.reasons)
+      : entry.changes.reasons;
+  return Array.isArray(raw) ? raw : raw ? [raw] : [];
+}
+```
+
+Removals show the removal reasons, and fall back to the original reasons if there aren't any. The last line of `reasonsOf` is defensive: if a history row ever holds a plain string where the type promises an array, the timeline shows it instead of crashing the whole profile on `.map`.
+
+The backend sorts the history (I pass `sort_direction: "asc"`), and the same component renders in the drawer and on the full page, with the dot and connector sizes coming from one `getTimelineStyles(isDrawer, isFirst, isLast)` helper.
+
+## Buttons that depend on where you are
+
+The profile drawer's call-to-action bar was already a small declarative list: each button carries a `show` condition and the list is filtered before rendering. It had three entries. The blacklist took it to seven, and the pattern is the reason that stayed readable. Here's the shape of it:
+
+```ts
+const buttons = [
+  { show: canAdvance && !isBlacklisted, name: "Continue", onClick: advance },
+  { show: canAdvance && inVacancy, name: "Reject", onClick: reject },
+  {
+    show: flag && isBlacklisted && !inVacancy,
+    name: "Remove from Blacklist",
+    onClick: remove,
+  },
+  {
+    show: flag && isBlacklisted && !inVacancy,
+    name: "Edit reason",
+    onClick: edit,
+  },
+  { show: flag && !isBlacklisted, name: "Blacklist", onClick: create },
+  {
+    show: flag && isBlacklisted && inVacancy,
+    name: "View Blacklist",
+    onClick: goToList,
+  },
+].filter((b) => b.show);
+```
+
+`inVacancy` comes from `useParams`: whether the drawer was opened from inside a vacancy route. Inside a vacancy, a blacklisted candidate can't be advanced, and the drawer points the recruiter to the blacklist page instead of offering to edit it there.
+
+In the vacancy table, rejected candidates can also be ticked for blacklisting. A rejection doesn't end the question of whether someone should apply again.
+
+## The hotfixes
+
+Five follow-ups shipped in the two days after release. They are a fair map of what I missed:
+
+- **Destructuring a field that wasn't always there.** Talent pool cards destructured `blacklist_information.blacklisted` directly. Responses without that object crashed the card. Optional chaining fixed it.
+- **Logged-out fetches.** Public profiles also render the history component, which fetched for anyone. A teammate and I gated it: the query is now `enabled` only when there is a user id, the viewer is logged in, and the tenant has `blacklist.enabled`. The same flag now hides every blacklist control for tenants that don't use it.
+- **A bulk action that ignored the flag**, fixed the same way.
+- **The infinite-list invalidation** described above.
+- **A wrong duration on the profile badge.** It was computed from the first history entry. History is sorted oldest first, so a candidate who had been removed and blacklisted again showed the time since the _first_ blacklisting. It now reads the current record's `blacklisted_at`.
+
+## Wrapping up
+
+To recap: batch-first calls, one modal owned by the central atom, reasons configured by the server, and resetting paginated caches instead of invalidating them. Those are the parts I'd keep.
+
+There are two things I'd explore next:
+
+- **Finding the record the easy way.** To edit or remove from the drawer, it needs the blacklist record id. It gets it by flattening the loaded pages of the infinite list and calling `.find` on the user id. That only works if the record is on a page that has been loaded. A get-by-user endpoint would make it reliable.
+- **Honest types instead of placeholder records.** The bulk action from the vacancy table builds fake records shaped like the API response, with empty strings and zeros, so one modal prop type covers both cases. It was pragmatic, but the type now says "this is a stored record" when it often isn't. A union of "new candidate" and "existing record" would be honest.
+
+Dates were the next thing on the same dashboard that looked simple. If you're curious, [registration windows](/works/registration-windows) covers what "closes on the 14th" means when the recruiter and the business are in different timezones. See you there!

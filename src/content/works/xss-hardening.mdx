@@ -1,0 +1,247 @@
+export const metadata = {
+  title: "Closing an XSS audit without breaking years of content",
+  summary:
+    "How I worked through two security audits on a career platform's frontend: sanitising recruiter HTML, taking raw HTML out of the Markdown renderer, and then rescuing the course content that depended on it.",
+  context: "Career & hiring platform",
+  role: "Frontend engineer",
+  stack: [
+    "React 18",
+    "TypeScript",
+    "DOMPurify",
+    "react-markdown",
+    "Turndown",
+    "Hono",
+  ],
+  year: "2026",
+  readingTime: "8 min read",
+  highlights: [
+    "Recruiter and course content reached candidates as raw HTML, an open door for stored XSS.",
+    "Rich text now passes a DOMPurify allowlist, and the Markdown renderer no longer interprets raw HTML.",
+    "Legacy HTML in course questions is converted to Markdown at render time, restoring formatting safely.",
+  ],
+};
+
+The product is a career platform with three parts that share one React codebase: a learning side with courses, homework and exams; a job portal where candidates browse vacancies and apply; and a hiring dashboard where enterprise partners post those vacancies and write screening questions. Pages are served by a small Hono app on Cloudflare Workers that renders meta tags and sets response headers, with an Express server as a fallback.
+
+A lot of what the platform shows is text written by someone other than the reader. Recruiters write job descriptions and screening questions. Course authors write lesson and exam content. Candidates read all of it. That makes it a natural place for stored XSS: if a recruiter's input can carry a script, every candidate who opens the vacancy runs it.
+
+A security audit came back with findings in exactly that area, and a second audit a few weeks later added more about response headers. I picked up both. In this article, I'll walk you through what was wrong, what I changed, and the regression I caused along the way.
+
+## The problem: what the audit found
+
+The findings fell into four groups:
+
+1. **Raw HTML injection.** Job descriptions and qualifications came from a rich-text editor as HTML and were rendered with `dangerouslySetInnerHTML`, unfiltered.
+2. **HTML through Markdown.** The shared `Markdown` component ran `rehype-raw`, which parses raw HTML inside Markdown and turns it into real elements. Anything rendered through it could carry HTML, and through HTML, script.
+3. **Components building HTML strings.** Some components concatenated HTML into a string and passed it to that Markdown component. The required-field asterisk was one: the label's text plus a `span` tag, joined into one string. The label text came from users.
+4. **Headers.** Some recommended headers were missing and one was set to a value that is now discouraged.
+
+Let's take them in order.
+
+Here's where each kind of content goes now:
+
+<Flow
+  caption="Three kinds of content, three safe paths"
+  nodes={[
+    { id: "rich", label: "Job description HTML", note: "rich-text editor" },
+    { id: "safe", label: "SafeHtml", note: "tag allowlist" },
+    { id: "questions", label: "Screening question", note: "stripped on write" },
+    { id: "md", label: "Markdown renderer", note: "no rehype-raw" },
+    { id: "course", label: "Course question", note: "legacy HTML mix" },
+    { id: "convert", label: "htmlToMarkdown", note: "tagged blocks only" },
+  ]}
+  layout={[
+    ["rich", "safe"],
+    ["questions", "md"],
+    ["course", "convert"],
+  ]}
+  edges={[
+    ["rich", "safe", "sanitise"],
+    ["questions", "md"],
+    ["course", "convert"],
+    ["convert", "md", "Markdown"],
+  ]}
+/>
+
+## Sanitising rich text with an allowlist
+
+Job descriptions really are HTML. The editor produces lists, headings, bold text and links, and recruiters rely on them. So stripping everything wasn't an option.
+
+Instead, I added a small `SafeHtmlRenderer` to the shared UI package, built on `isomorphic-dompurify`, and replaced the raw injection with it. Here's the core of it:
+
+```tsx
+const ALLOWED_TAGS = [
+  "p",
+  "br",
+  "strong",
+  "em",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
+  "span",
+  "div",
+  "a",
+  "code",
+  "pre",
+  "blockquote",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+];
+const ALLOWED_ATTR = ["href", "target", "rel", "class", "style"];
+
+export function SafeHtml({ html, as: Tag = "div", className }: Props) {
+  const clean = DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR });
+  return (
+    <Tag
+      className={cn("prose", className)}
+      dangerouslySetInnerHTML={{ __html: clean }}
+    />
+  );
+}
+```
+
+Notice that it still uses `dangerouslySetInnerHTML`, but only on output that has been through the sanitiser. The difference is that the risky call now lives in one component with one configuration, instead of being scattered across pages.
+
+**Allowlist, not blocklist.** A blocklist names what's dangerous: `script`, `iframe`, `on*` attributes. It is always one browser feature behind. An allowlist names what the editor actually produces, and everything else is dropped. When someone finds a new trick, it most likely uses a tag or attribute that was never on the list.
+
+## Taking raw HTML out of Markdown
+
+The shared Markdown component was used everywhere: course content, form labels, screening questions, help text. Its `rehype-raw` plugin was there "for HTML tags", which is the whole problem. With it, Markdown is a superset of HTML, and every place that renders user Markdown has to be trusted as much as a place that renders user HTML.
+
+I removed the plugin, and in the follow-up also removed its lazy import so it isn't loaded at all. Now `react-markdown` treats raw HTML in Markdown as text, which is its safe default.
+
+### Building markup with React, not strings
+
+That broke the components that had been relying on it. Here's the required-field asterisk, before and after:
+
+```tsx
+// before: user text and markup glued into one string
+const label = `${title}${required ? `<span class="required">*</span>` : ""}`;
+return <Markdown>{label}</Markdown>;
+
+// after: the user text is data, the asterisk is a React node
+return (
+  <>
+    <Markdown>{title}</Markdown>
+    {required && <RequiredMark>*</RequiredMark>}
+  </>
+);
+```
+
+The old version only worked because raw HTML was allowed, and it mixed trusted markup with untrusted text in the same string. The new one keeps them apart. I changed it in the shared field wrapper and in the custom dropdown on the apply flow.
+
+## Sanitising on write, too
+
+Screening questions are plain text. They're written by recruiters in the vacancy form, stored, and shown to every applicant. Rendering them safely is one half. The other half is not storing HTML in them in the first place:
+
+```ts
+export const stripHtmlTags = (input: string) =>
+  DOMPurify.sanitize(input, { ALLOWED_TAGS: [] });
+
+// in the vacancy submission
+questions: form.questions.map((q) => ({ ...q, question: stripHtmlTags(q.question) })),
+```
+
+With an empty tag list, DOMPurify keeps the text and drops every tag. In the same change the question input became a textarea instead of a single-line field.
+
+Sanitising on both ends is deliberate. Render-time sanitising protects the reader whatever is in the database. Write-time sanitising keeps the stored data clean for anything else that reads it later and may not sanitise at all.
+
+## The regression: years of HTML in course content
+
+This is where it gets interesting. About a week after the first PR, course and exam questions on the learning side started showing literal tags: `<p>`, `<strong>`, `<ol>` printed as text in front of students.
+
+Those questions had been authored over a long time, some in Markdown, some as HTML, and some as Markdown with HTML pasted in the middle. They had always rendered correctly because `rehype-raw` was there. Removing it was right, and it broke them.
+
+There were two ways out: migrate the stored content to Markdown, or convert at render time. A migration means a backend script over every stored question, and a mistake in it rewrites content permanently. A render-time conversion can ship as a frontend hotfix and be reverted in minutes. I went with conversion, in a hotfix co-authored with a teammate.
+
+Here's the converter:
+
+```ts
+const turndown = new TurndownService({
+  headingStyle: "atx",
+  codeBlockStyle: "fenced",
+});
+turndown.escape = (text) => text; // the text is already Markdown
+
+const HAS_TAG = /<[a-z][\s\S]*?>/i;
+
+export function htmlToMarkdown(content: string): string {
+  if (!content || !HAS_TAG.test(content)) return content;
+
+  return content
+    .split(/\n\n/)
+    .map((block) => (HAS_TAG.test(block) ? turndown.turndown(block) : block))
+    .join("\n\n");
+}
+```
+
+Three details make this work on real content:
+
+- **Short-circuit when there are no tags.** Most questions are plain Markdown. They are returned untouched, without running a parser.
+- **Convert per block, not per document.** Turndown expects HTML. Given a document that is mostly Markdown with one HTML table in it, it would mangle the Markdown parts. Splitting on blank lines and converting only the blocks that contain a tag keeps the Markdown blocks as they were.
+- **Turn off escaping.** By default Turndown escapes characters like `*` and `_` so they survive as literal text. Here the surrounding text is meant to be Markdown, so escaping would break emphasis and lists that already worked.
+
+The converted Markdown then goes through the same Markdown component, still without `rehype-raw`. Turndown only expresses formatting, and anything it leaves behind as a tag is shown as text, because the renderer no longer interprets raw HTML.
+
+The conversion restores the formatting without restoring the hole.
+
+<Callout label="lesson">
+  A security fix that changes how content renders is a content migration,
+  whether or not you write one. Find out what the stored data actually looks
+  like before you remove the thing that was quietly making it work.
+</Callout>
+
+## Setting response headers at the edge and in the fallback
+
+The headers are set in a Hono middleware on Cloudflare Workers, after the response is built. Before the audits it set four: `nosniff`, `X-Frame-Options: DENY`, HSTS, and `X-XSS-Protection: 1; mode=block`. Across the two audits I added and changed these:
+
+```ts
+app.use("*", async (c, next) => {
+  await next();
+  const h = c.res.headers;
+  h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  h.set(
+    "Permissions-Policy",
+    "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
+  );
+  h.set("Cross-Origin-Opener-Policy", "same-origin");
+  h.set("Cross-Origin-Resource-Policy", "same-origin");
+  h.set("X-Permitted-Cross-Domain-Policies", "none");
+  h.set("X-XSS-Protection", "0");
+});
+```
+
+Let's go through what each one buys you:
+
+- **Referrer-Policy** stops full URLs, which can contain ids and search terms, from leaking to other sites.
+- **Permissions-Policy** limits powerful features to our own origin, turns geolocation off, and opts out of FLoC-style interest tracking. My first version disabled the camera completely. A teammate changed it to `self` shortly after, because a camera feature on the platform needed it. That's what the policy is for: it lists what the product uses, and nothing else.
+- **COOP and CORP** keep other origins from holding a reference to our window or embedding our resources.
+- **`X-XSS-Protection: 0`** looks like a step backwards. It isn't. The browser filter it controls has been removed from modern browsers, and where it still exists it can be abused to selectively block scripts on a page. Current OWASP guidance is to turn it off and rely on proper output encoding and CSP, so that's what the audit asked for.
+
+The Express fallback server had no security headers at all. I added the same set there, so a request that falls back gets the same protection as one served from the edge.
+
+### A login detail from the same audit
+
+The second audit also flagged the login form. When the API rate-limited a user with HTTP 429, the error handler read `err.response.data.errors[0].message` directly and crashed if any part of that was missing. I made the parsing null-safe and gave 429 its own banner, so a rate-limited user sees the server's message instead of a broken form.
+
+## Wrapping up
+
+To recap, the parts I'd keep: allowlists over blocklists; sanitising on write _and_ on render; one component that owns the risky DOM call; and converting legacy content at render time, where a mistake costs one deploy to undo.
+
+There are a few things I'd explore next:
+
+- **Revisiting inline style.** `style` is still an allowed attribute. Recruiters' formatting depends on it, and DOMPurify doesn't let it run script, but it still allows visual tricks like hiding text or overlaying content. A stricter option is to allow a few class names and drop inline style.
+- **Retiring the converter.** The render-time conversion costs a Turndown pass on every render of an old question. It's cheap, but it's permanent. Once the content is stable, a one-off migration of stored HTML to Markdown would let the converter be deleted.
+- **Adding a Content-Security-Policy.** That would be the next layer after all of this, rather than another header that only exists to be set to zero.
+
+The same codebase also has a [candidate blacklist](/works/candidate-blacklist), where the hard part was keeping one fact consistent across five screens. Hope you'll give it a look!
