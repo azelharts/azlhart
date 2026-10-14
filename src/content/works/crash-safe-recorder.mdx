@@ -1,0 +1,208 @@
+export const metadata = {
+  title: "A recorder that survives the crash",
+  summary:
+    "How I rebuilt a browser recorder for hour-long coaching conversations so it streams audio to IndexedDB three seconds at a time, and a refresh, a closed lid or a dead tab never costs the recording.",
+  context: "Enterprise talent platform",
+  role: "Frontend engineer",
+  stack: ["Vue 3", "TypeScript", "MediaRecorder", "IndexedDB", "Vitest"],
+  year: "2026",
+  readingTime: "7 min read",
+  highlights: [
+    "Hour-long coaching recordings lived in memory, so a refresh or crashed tab lost the whole session.",
+    "Chunks now stream to IndexedDB every 3 seconds through a serial write queue and a pure state machine.",
+    "An interrupted session can be continued, processed or discarded, and is never offered to another user.",
+  ],
+};
+
+Picture a coaching session on an office laptop. An employee and their supervisor or mentor sit down for an hour, the browser records the conversation, and an AI pipeline turns the audio into a transcript, a summary and a list of commitments that feed the employee's development plan. That's the 1-on-1 workspace in a talent-management system I worked on for a large state-owned enterprise.
+
+The whole feature rests on one assumption: **the audio exists**. A coaching conversation can't be repeated on demand. If the recording is gone, so is the report, the commitments and the hour two people spent talking.
+
+In this article, I'll walk you through how I rebuilt that recorder so it survives refreshes, crashed tabs and closed lids. We'll look at the write queue, a small state machine, a trick for ignoring late browser events, and the recovery flow that hands the audio back.
+
+## The problem
+
+The first recorder was the textbook version. A `MediaRecorder` pushed every chunk into an in-memory array, and on `stop` the array became one `Blob` and was uploaded. Here's what that looks like:
+
+```ts
+const chunks: Blob[] = [];
+recorder.ondataavailable = (e) => chunks.push(e.data);
+recorder.onstop = () => upload(new Blob(chunks));
+```
+
+Notice that nothing touches disk until the very end. That's fine for a voice note. For a 45-minute session on an office laptop it's a gamble: a refresh, a crashed tab, a laptop lid closed on the way to another meeting, and all of it is gone.
+
+There was a second, quieter bug. "Pause" only stopped the on-screen timer. The microphone kept recording, so whatever people said while paused ended up in the transcript.
+
+I rewrote the recorder as a stack of three PRs: a storage layer, the recorder core, and a recovery dialog. Let's go through the decisions in each.
+
+## Streaming to disk instead of memory
+
+The core idea is simple. We ask `MediaRecorder` for a chunk every three seconds and write each chunk to IndexedDB **as it arrives**. At any moment, the worst case is losing the last three seconds.
+
+Here's the whole path a chunk takes:
+
+<Flow
+  caption="How a chunk reaches disk"
+  nodes={[
+    { id: "rec", label: "MediaRecorder", note: "every 3 s" },
+    { id: "queue", label: "Write queue", note: "one at a time" },
+    { id: "idb", label: "IndexedDB part", note: "rotates at 5 MB" },
+    { id: "meta", label: "Session meta", note: "status refresh" },
+  ]}
+  layout={[["rec", "queue", "idb"], ["meta"]]}
+  edges={[
+    ["rec", "queue"],
+    ["queue", "idb", "append"],
+    ["queue", "meta", "if live"],
+  ]}
+/>
+
+<Stats
+  items={[
+    { value: "3 s", label: "Timeslice" },
+    { value: "5 MB", label: "Part rotation" },
+    { value: "137", label: "Tests in the storage PR" },
+  ]}
+/>
+
+That sounds easy, but the simple version breaks in three places.
+
+### Setting up the write queue
+
+`ondataavailable` fires on the recorder's own schedule. It doesn't await the previous handler. If one IndexedDB write is slow, the next chunk's write starts on top of it, and two writes race over the same record.
+
+The fix is to treat writes as a queue rather than as events. Every chunk is chained onto a single promise, so they land strictly in order:
+
+```ts
+let queue = Promise.resolve();
+
+function onData(e: BlobEvent, recorderEpoch: number) {
+  if (e.data.size === 0) return;
+  queue = queue
+    .then(() => writeChunk(e.data, recorderEpoch))
+    .catch(() => {
+      if (recorderEpoch === epoch) failWithStorageError();
+    });
+}
+```
+
+Notice that the queue is a plain `let`, not reactive state. It's a scheduling lock, not data. Nothing in the UI should re-render because it changed. (We'll come back to that `recorderEpoch` argument in a moment.)
+
+### Rotating parts so writes stay cheap
+
+IndexedDB can't append to a stored `Blob`. "Appending" means reading the old blob and writing back `new Blob([old, chunk])`. Do that every three seconds for an hour and every write copies everything before it, which makes the cost quadratic.
+
+So chunks are grouped into **parts**. Once a part passes 5 MB, the next chunk starts a new one. Each write now copies at most one part.
+
+An earlier version also called `getAll(sessionId)` on every tick, just to check whether the current part already existed. That deserialised every stored blob every three seconds. A local `Set` of the parts already created answers the same question without touching storage.
+
+### Counting bytes after they're saved
+
+The UI shows how much has been saved, and the counter only goes up **after** the write succeeds. If it went up first, then when the storage quota rejected a write the screen would still say "38 MB saved" for bytes that never landed. That's the worst kind of status message: confident and wrong.
+
+When the quota is exceeded, the recorder stops, releases the microphone and tells the user exactly what happened. The parts already saved are safe, and the message says so.
+
+## A state machine with no Vue in it
+
+A recording has more states than "on" and "off". It can be recording, paused, finalizing, completed, interrupted, lost its microphone, or failed. The rules for moving between them live in a plain transition table, with no Web APIs and no Vue in it:
+
+```ts
+const TRANSITIONS = {
+  idle: { START: "recording", FAIL: "error" },
+  recording: {
+    PAUSE: "paused",
+    STOP_REQUEST: "finalizing",
+    INTERRUPT: "interrupted",
+    MIC_LOST: "mic_lost",
+  },
+  paused: {
+    RESUME: "recording",
+    STOP_REQUEST: "finalizing",
+    INTERRUPT: "interrupted",
+    MIC_LOST: "mic_lost",
+  },
+  finalizing: { FINALIZED: "completed", FAIL: "error" },
+  interrupted: {
+    START: "recording",
+    STOP_REQUEST: "finalizing",
+    RESET: "idle",
+  },
+  // ...
+} as const;
+
+const next = (state, event) => TRANSITIONS[state]?.[event] ?? state;
+```
+
+There are two choices worth noticing here.
+
+**Illegal events are no-ops, not errors.** The events come from the browser, and the browser is late. A track's `ended` event can arrive after the user has already pressed Stop. Throwing on that would turn a harmless leftover event into a crash.
+
+**It's a pure function on purpose.** The test runner ignores `.vue` files when it measures coverage, so any logic left in a component goes untested without anyone noticing. A table can be tested exhaustively without a fake `MediaRecorder`.
+
+Paused is now a real state, too. The `MediaRecorder` is actually paused, the microphone stream is still held, and the chunks already saved still belong to this session. That fixes the transcript leak, and it means pressing Stop while paused no longer produces an empty file.
+
+## Handling late events
+
+This is where it gets interesting. The trickiest bugs came from **late** events. `stop()` asks the recorder for its last chunk, and that chunk arrives after the queue has drained. By then the user may have started a new recording.
+
+To tell old events from new ones, each recorder captures a generation number, an **epoch**, when it's created:
+
+```ts
+function attach(stream: MediaStream) {
+  const myEpoch = ++epoch;
+  const rec = new MediaRecorder(stream);
+  rec.ondataavailable = (e) => onData(e, myEpoch);
+  rec.start(3000);
+}
+
+async function writeChunk(blob: Blob, forEpoch: number) {
+  if (forEpoch !== epoch) return; // this recording has been replaced
+  // ...
+}
+```
+
+The key detail is that the epoch is captured when the recorder is **created**, not when the event fires. By the time a stale event fires, the global epoch has moved on, and the comparison catches it.
+
+The same idea guards the session's metadata row. Every write refreshes it with `status: "recording"`, which is how an interrupted session is detected later. But the final chunk after `stop()` would write that status straight back over `"completed"`, and a finished session would show up as "interrupted" forever. The metadata is now only refreshed while the state is still live.
+
+<Callout label="lesson">
+  Most of the bugs in this feature weren't about recording. They were about
+  **time**: browser events that arrive after the state they belonged to has
+  already changed.
+</Callout>
+
+## Building the recovery flow
+
+Storing the audio is half the job. The other half is offering it back.
+
+When the session page loads, it checks IndexedDB for a metadata row that still says `recording` and has chunks behind it. That combination means the previous attempt never finished. The user then gets four options: **Continue**, **Stop & process**, **Later**, or **Discard**.
+
+Continuing is subtler than it looks:
+
+- New parts are numbered after the existing ones, so nothing is overwritten.
+- The clock starts from the saved duration, not from zero.
+- Devices are re-acquired using the **recording's** mode, not the session's. A session can be switched from in-person to online, but a recording that started on the microphone has to resume on the microphone.
+
+Two bugs here came from the edges of the page:
+
+- **Leaving the page used to finish the recording.** Leaving called `stop()`, which marked the recording as completed, so it was never offered back. Leaving the page now **interrupts** instead of stopping.
+- **The dialog appeared over a loading screen.** The local IndexedDB read is fast and usually returned before the session detail request did, so the dialog popped up over a loading skeleton. It now waits for the page to have something to sit on top of.
+
+### Making shared computers fail closed
+
+These are office machines, and people share them. User B must never see, play or resume user A's audio. Every recording stores its owner's employee ID, and recovery only offers recordings that match the current user.
+
+An early version of that check was `!currentId || owner === currentId`. Can you spot the problem? While the profile was still loading, `currentId` was an empty string, so the check passed **for everyone**.
+
+It now fails closed: no confirmed identity, no recordings offered. The local-recordings gallery follows the same rule: no confirmed owner, nothing listed.
+
+## Wrapping up
+
+To recap, we moved the recorder from an in-memory array to a serialised write queue on IndexedDB, rotated parts to keep writes cheap, put the rules in a pure state machine, versioned every recorder with an epoch, and built a recovery flow that only hands audio back to its owner. A few ideas I'd carry into any similar project:
+
+- **Treat the browser's event order as a suggestion.** Serialise writes, version every async tail, make illegal transitions harmless.
+- **Put the rules where the tests can reach them.** The state machine, the part rotation and the ownership check are all pure functions. That's where most of the tests went.
+- **Never let the UI say something the data doesn't back up.** Byte counters after the write, "paused and can be resumed" rather than "will be lost", and honest errors when storage runs out.
+
+Storage is only one side of it, though. The [next article](/works/mediarecorder-in-the-wild) looks at what happens when the hardware itself goes away mid-session: microphones unplugged, shared tabs closed, laptops put to sleep. I hope this one gives you a few ideas for your own recorder.

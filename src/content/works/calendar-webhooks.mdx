@@ -1,0 +1,205 @@
+export const metadata = {
+  title: "Outlook changes in seconds, not sweeps",
+  summary:
+    "How I added Microsoft Graph change notifications next to an existing polling sweep, so a session rescheduled in Outlook shows up in seconds, and fixed the sweep so it couldn't quietly starve or skip sessions.",
+  context: "Enterprise mentoring platform",
+  role: "Full-stack engineer",
+  stack: [
+    "Node.js",
+    "Express",
+    "Microsoft Graph",
+    "BullMQ",
+    "PostgreSQL",
+    "Sequelize",
+  ],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "A 15-minute polling sweep meant a session moved in Outlook could show the old time for a quarter hour.",
+    "Graph webhooks now enqueue the same sync job as the sweep, which stays on to back-fill missed notifications.",
+    "Fixes to the sweep stopped it re-polling the same 200 sessions and silently skipping deduplicated jobs.",
+  ],
+};
+
+When someone moves a meeting in Outlook, they expect every other tool to know about it right away. Waiting a quarter of an hour feels broken, even if the data eventually catches up.
+
+The product is a mentoring module inside a larger HR platform. Mentors and mentees book 1-on-1 sessions, and every booking becomes a real Outlook event in the organizer's mailbox. When a mentor drags a session to Thursday in Outlook, they expect the platform to know before the mentee opens the app.
+
+A teammate built the calendar integration: outbound sync (create, update and delete Outlook events from the platform) and an inbound **polling sweep**, a cron job that asks Graph "did anything change?" for every linked session and applies what it finds. My work was the push path next to it: Graph webhooks, the subscription lifecycle, and a set of fixes to the sweep that came out of review and that the push path depended on.
+
+In this article, I'll walk you through how the push path works, how an unauthenticated endpoint stays safe, and the two quiet bugs we found in the sweep along the way.
+
+## The problem: polling alone is slow
+
+The sweep runs every 15 minutes. So a reschedule made in Outlook could sit unseen for up to a quarter of an hour. During that window the platform showed the old time, sent reminders for the old time, and let people join a session that had moved.
+
+Graph can tell you instead. You create a **subscription** on a mailbox's events, and Graph POSTs a notification to your endpoint whenever one changes. The edit lands in seconds.
+
+But notifications are best-effort. Your endpoint can be down for a deploy, and a subscription can lapse before you renew it. Graph won't resend a notification you missed, and there's no way to ask for it.
+
+So I made the push path **additive**: the sweep stays on as the back-fill that makes those gaps self-healing. Here's how the two paths fit together:
+
+<Flow
+  caption="Two entry points, one sync job"
+  nodes={[
+    { id: "edit", label: "Outlook edit" },
+    { id: "graph", label: "Graph notification", note: "POST in seconds" },
+    { id: "endpoint", label: "/notifications", note: "clientState check" },
+    { id: "cron", label: "Sweep cron", note: "every 15 min" },
+    { id: "sweep", label: "Least recently polled", note: "cursor order" },
+    { id: "job", label: "Inbound sync job", note: "reads, applies" },
+  ]}
+  layout={[
+    ["edit", "graph", "endpoint"],
+    ["cron", "sweep", "job"],
+  ]}
+  edges={[
+    ["edit", "graph"],
+    ["graph", "endpoint"],
+    ["endpoint", "job", "by event ID"],
+    ["cron", "sweep"],
+    ["sweep", "job", "enqueue"],
+  ]}
+/>
+
+Both paths only decide _which session_ to look at. Neither one trusts what it's told about the change. They both enqueue the same BullMQ job, which reads the event from Graph and applies it through the code my teammate had already written.
+
+## Securing an endpoint with no login
+
+Graph can't obtain a JWT, so the notification endpoint sits outside the authenticated API. The only credential is `clientState`: a secret you hand Graph when creating the subscription, which it echoes back in every notification.
+
+I derive it with an HMAC of the app's client secret, so the value Graph echoes can't be turned back into the real secret if it leaks.
+
+### The handshake is reflected input
+
+When you create a subscription, Graph first calls your URL with a `validationToken` query parameter and expects it echoed back as `text/plain`, quickly. An unauthenticated endpoint that reflects a query string is a textbook injection point, so the token is length-bounded and refused if it contains markup characters.
+
+### Comparing the secret in constant time
+
+Node's `timingSafeEqual` throws when the two buffers differ in length. The obvious fix, returning `false` early, leaks the secret's length through timing. So the mismatch path still burns a comparison:
+
+```js
+function secureEquals(a, b) {
+  const left = Buffer.from(String(a ?? ""), "utf8");
+  const right = Buffer.from(String(b ?? ""), "utf8");
+  if (left.length !== right.length) {
+    timingSafeEqual(left, left); // same cost either way
+    return false;
+  }
+  return timingSafeEqual(left, right);
+}
+```
+
+Notice the `timingSafeEqual(left, left)` call. Its result is thrown away; it's only there so a wrong-length guess costs about as much as a right-length one.
+
+An unset secret is treated as "feature off", not as a match. An empty-versus-empty comparison would otherwise let every caller through.
+
+### Status codes are a protocol
+
+Graph reads your status code as an instruction. A 2xx means "all handled, never send this again", and a failure means "retry". So:
+
+- Anything the endpoint can't act on (feature off, empty batch, unknown event) gets **202**, so Graph doesn't retry into a wall.
+- Each notification is handled in its own `try/catch`. One bad entry can't fail the batch, and Graph isn't told to retry entries that were already processed.
+- A batch over the size cap gets **503**, not truncation. My first version got this wrong: it processed the first slice and answered 202, which told Graph the whole array was handled, and the tail was lost with nothing to notice it. Processing the whole array is cheap, so the cap only exists to refuse an absurd payload.
+
+## Managing the subscription lifecycle
+
+Subscriptions live in Graph, not in a new table. Graph is where they're enforced and expired, and every notification already maps back to a session through the stored event ID.
+
+- **Create lazily.** After the platform books an event, it ensures a subscription exists for that organizer's mailbox. The call is idempotent: if a live subscription already watches that mailbox, it does nothing. We only ever watch mailboxes we've booked on. Listing follows Graph's paging links, so a mailbox covered on a later page is neither subscribed twice nor left to lapse.
+- **Renew before Graph reaps it.** An events subscription can't run longer than 4,230 minutes. A cron job every six hours renews anything due to lapse within 12 hours. A subscription Graph has already deleted can't be renewed, so the job recreates it from the resource it was watching. One unreachable mailbox is logged and skipped, so it can't abandon the rest of the run.
+
+There's no feature flag. The three things the path needs (a public base URL, the derived secret, Graph credentials) **are** the switch. An environment missing any of them is inert, not half-enabled.
+
+## One gate, two doors
+
+The sweep already had a kill switch and a mailbox allowlist, a safety net while a tenant-wide Exchange policy was pending. My first draft of the notification path skipped both.
+
+The sweep filtered them in SQL, so it didn't occur to me that the second entry point needed them too. Exchange policy happened to bound the push path that day. It would stop bounding it the day that policy was opened up.
+
+The rule I wrote in the code comment: a gate honoured on only one of the two entry points is worse than no gate at all, because everyone believes it's enforced. The notification handler now checks the same switch and allowlist before it enqueues anything, and `ensureSubscription` refuses mailboxes outside the allowlist, since a subscription whose notifications get dropped is just a renewal cost.
+
+The same thing happened with session status. The sweep only selected upcoming sessions in SQL, but a notification has no such filter, so an Outlook edit to a missed session could have moved its schedule while it stayed "missed". I moved that check into the shared sync step, before the Graph call, so both paths go through one rule instead of each keeping its own.
+
+<Callout label="lesson">
+  When a feature gets a second entry point, every filter that lived in the first
+  one's query is now a filter the second one silently skips. Move the rule to
+  the code both paths share.
+</Callout>
+
+## Parsing what Graph actually sends
+
+The handler pulls the event ID out of the notification's `resource` path. My first matcher only accepted the OData form, `Events('{id}')`. Real notifications arrive as `Users/{id}/Events/{eventId}`.
+
+CI caught it on the happy-path test. In production it would have been invisible: every notification dropped as "unrecognised", which looks exactly like Graph never calling, while the sweep quietly synced everything 15 minutes later and hid the problem.
+
+Both forms now parse, both are pinned by tests, and the ID is URL-decoded. A percent-encoded ID left raw wouldn't match the stored one, and the notification would be dropped as "no matching session" without any error.
+
+## Fixing the sweep
+
+Reviewing the sweep turned up two ways it could fail without anyone noticing. I fixed both on my teammate's PR, after review comments from a third engineer.
+
+### Starvation
+
+The sweep picked its batch with `ORDER BY schedule ASC LIMIT 200`, and a successful poll changed nothing the query looked at. Every tick re-selected the same 200 sessions. Production already had 212 eligible sessions against that limit of 200, so the last twelve would never be polled until they aged out of the window.
+
+I added a `calendar_last_polled_at` cursor, stamped only for sessions that were actually handed off, and ordered by it. Here's a sketch of the query and the stamp:
+
+```js
+const sessions = await Session.findAll({
+  where: eligibleForSync(now),
+  order: [
+    [literal("last_polled_at ASC NULLS FIRST")],
+    ["schedule", "ASC"],
+    ["id", "ASC"],
+  ],
+  limit: batchLimit,
+});
+// ...enqueue each, collect the ones that queued...
+await Session.update(
+  { last_polled_at: new Date() },
+  { where: { id: queuedIds }, silent: true }, // the sweep's cursor, not a user edit
+);
+```
+
+`NULLS FIRST` puts never-polled sessions at the front, and the oldest stamps follow. `silent: true` keeps `updated_at` clean, because the cursor is bookkeeping, not a change to the session. A failed enqueue is caught per item and keeps its old stamp, so it sorts to the front of the next tick.
+
+In the same change I moved the error backoff. My earlier version had reused the "don't sync before X" column for failures, and that column is read by the sync step both paths share. One transient Graph failure silenced a session's instant path for an hour.
+
+The backoff now lives only in the sweep's query, keyed off the new cursor. The shared column went back to meaning one thing: the echo window after our own outbound write, which both paths must honour, because our own PATCH to Outlook raises a notification too.
+
+### Deduplication that skipped work
+
+To stop a slow drain from stacking duplicate jobs per session, I gave each child job a stable BullMQ `jobId`. The reviewer's follow-up found the problem.
+
+A `jobId` isn't scoped to queued-and-active. It lives as long as the job is retained, and this queue keeps 100 completed and 50 failed jobs. The tick after a session's job completed, `add` returned the old job and added nothing. The loop counted it as enqueued, stamped the cursor, and rotated the session to the back. A session could go unpolled for days while the metrics said success.
+
+Here's the replacement:
+
+```js
+await SyncInboundJob.add(
+  { sessionId },
+  // dropped when the job completes or fails; no ttl, or it outlives the job
+  { deduplication: { id: `inbound-sync:${sessionId}` } },
+);
+```
+
+BullMQ's `deduplication` key is removed when the job completes or fails, so it guards exactly the window I wanted. The tests assert there's no `jobId` and no `ttl`, and that a second tick enqueues the same session again.
+
+## The same honesty on the frontend
+
+Later, building recurring-series edit and delete on the web app, two rules carried over.
+
+The mutation has `retry: false`, because a silent resend rebooks Outlook and emails every participant again. And errors are told apart: a 502 with the API's own reason means Outlook refused and nothing changed, so the dialog offers **Try again**. A gateway 502, a 504 or no response means the outcome is unknown, so the app refetches the agenda and asks the user to check.
+
+## Wrapping up
+
+To recap, here's what I'd keep from this work:
+
+- **Push for speed, poll for truth.** The webhook makes it fast. The sweep makes it correct. Neither one has to be perfect.
+- **Read status codes as instructions to the caller.** 202 and 503 aren't about how the request went. They're about what Graph does next.
+- **Distrust success counters.** Both sweep bugs reported healthy numbers. The fix in each case was to make "counted" mean "actually happened".
+
+What I'd do differently: put the shared gates in place before the second entry point exists, instead of finding them one at a time in review.
+
+If you're adding a second door to an existing integration, I hope this saves you a few review rounds.

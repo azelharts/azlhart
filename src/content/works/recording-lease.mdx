@@ -1,0 +1,239 @@
+export const metadata = {
+  title: "One device at a time",
+  summary:
+    "How a heartbeat lease and a row lock stop two browsers from recording the same coaching session, without letting a flaky network or a wiped localStorage lock the real owner out.",
+  context: "Enterprise talent platform",
+  role: "Full-stack engineer",
+  stack: [
+    "Vue 3",
+    "TypeScript",
+    "Java 21",
+    "Spring Boot",
+    "Spring Data JPA",
+    "Vitest",
+  ],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "The same user could record one session in two browsers, and the second upload overwrote the first report.",
+    "A heartbeat lease on the session row, guarded by a row lock, lets exactly one device record at a time.",
+    "Flaky Wi-Fi or a wiped localStorage never locks out the real owner, because local audio counts as proof.",
+  ],
+};
+
+The product is a talent-management system for a large state-owned enterprise. One part of it is a 1-on-1 workspace. An employee and their supervisor or mentor hold a coaching session, the browser records it, and an AI pipeline turns the audio into a report that feeds the employee's development plan.
+
+The recorder writes every chunk to IndexedDB as it arrives, so a crash costs a few seconds at most. That made a different question visible. QA asked it in a team thread: "I'm recording in browser A. If I open the session in browser B, can I start recording there too?"
+
+In this article, I'll walk you through the answer we shipped: a lease that lets exactly one device record a session. We'll cover the server side in Spring Boot, the client side in Vue, and the edge cases where the obvious rules turn out to be wrong.
+
+## The problem
+
+Yes, you could record in both. Then things went wrong in one of two ways.
+
+If the first recording's analysis was still running, the second upload was rejected with a 400 and the user saw "upload failed". If it had finished, the second upload re-queued the job and **overwrote the first report**.
+
+The "currently recording" state only existed in the IndexedDB of the browser doing the recording. The server had no idea, and no other browser did either.
+
+The fix is a lease: one device holds a session's recording, it proves it's still alive, and everyone else is refused. I built both halves, the Spring Boot endpoints and the Vue composable that drives them. The idea is old. Most of the work was in the edges.
+
+Here's the lifecycle of a lease:
+
+<Flow
+  caption="Lifecycle of a recording lease"
+  nodes={[
+    { id: "claim", label: "claim()", note: "recording/start" },
+    { id: "lock", label: "Row lock", note: "SELECT FOR UPDATE" },
+    { id: "lease", label: "Lease on session row", note: "device ID" },
+    { id: "refuse", label: "409 to others", note: "ON_OTHER_DEVICE" },
+    { id: "release", label: "Lease released", note: "upload or stale" },
+    { id: "beat", label: "Heartbeat", note: "every 30 s" },
+  ]}
+  layout={[
+    ["claim", "lock", "lease"],
+    ["refuse", "release", "beat"],
+  ]}
+  edges={[
+    ["claim", "lock"],
+    ["lock", "lease", "free"],
+    ["lock", "refuse", "held elsewhere"],
+    ["lease", "beat", "while live"],
+    ["beat", "release"],
+  ]}
+/>
+
+## Giving each browser an identity
+
+The lease needs an identity for the browser. It must not be the user, because the bug is the **same** user on two browsers. It also shouldn't be anything about the employee. So it's a random UUID, created once and kept in `localStorage`:
+
+```ts
+const DEVICE_KEY = "recording-device-id";
+
+export function readDeviceId(): string {
+  try {
+    const stored = localStorage.getItem(DEVICE_KEY);
+    if (stored) return stored;
+    const created = crypto.randomUUID();
+    localStorage.setItem(DEVICE_KEY, created);
+    return created;
+  } catch {
+    // Private mode / blocked storage: a fresh ID for this page.
+    return crypto.randomUUID();
+  }
+}
+```
+
+Notice the `catch` branch. If storage is blocked, every call would mint a new UUID, and the browser would look like a different device on every heartbeat. That's why the caller reads the ID **once per page** and keeps it. The ID is then at least stable for as long as the page lives.
+
+## Keeping the lease on the server
+
+The session row gained four nullable columns: recording state, device ID, started-at and heartbeat-at. The rule for "is someone holding this" fits in one function:
+
+```java
+static final Duration STALE_AFTER = Duration.ofMinutes(2);
+
+boolean isActive(Session s, LocalDateTime now) {
+    if (s.getRecordingState() == null) return false;
+    LocalDateTime beat = s.getHeartbeatAt();
+    return beat != null && !beat.plus(STALE_AFTER).isBefore(now);
+}
+
+boolean isHeldElsewhere(Session s, String deviceId, LocalDateTime now) {
+    return isActive(s, now)
+        && s.getDeviceId() != null
+        && !s.getDeviceId().equals(deviceId);
+}
+```
+
+A lease nobody has renewed for two minutes is treated as abandoned, and any device may take it. That covers the browser that crashed, the laptop that was closed and never reopened, the tab someone forgot about.
+
+There's no cleanup job, either. Staleness is computed when the row is read.
+
+Start, heartbeat, pause, resume and stop all begin the same way: check `isHeldElsewhere`, and if it's true, return **409 `RECORDING_ON_OTHER_DEVICE`**. A successful upload releases the lease as part of the same transaction that queues the analysis.
+
+### Adding a row lock
+
+The first version had a race that is easy to miss in review. Two browsers press Record at the same moment. Both read the row, both see no active lease, both write their own device ID, and the last write wins silently. The lease would only work when nobody actually raced it.
+
+So every recording endpoint loads the session through a finder that takes a row lock:
+
+```java
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT s FROM Session s WHERE s.id = :id AND s.deleted = false")
+Optional<Session> findLiveByIdForUpdate(@Param("id") String id);
+```
+
+That is a `SELECT ... FOR UPDATE`. The second request waits until the first transaction commits, then reads a row that already has a live lease, and gets the 409.
+
+The lock is held for one short transaction, and only on these endpoints. Reading the session detail never takes it.
+
+### Closing the loopholes
+
+A few rules came out of review, and each one closes a way around the lease:
+
+- **`deviceId` is required** on every recording call. It's trimmed, can't be blank, and can't be longer than 64 characters. Without that, a client that forgets to send it would be "no device", and the lease would protect nothing.
+- **A heartbeat never creates a lease.** On a session with no lease it is refused with **409 `RECORDING_NOT_HELD`**. Otherwise a tab that kept beating after its recording was uploaded from somewhere else would quietly take the session back.
+- **The holder is only exposed while the lease is live.** The session detail returns `recordingActive` and `recordingDeviceId`, and the device ID is `null` once the heartbeat has gone stale. A dead lease shouldn't make another browser look busy.
+- **Pause and resume now write the lease** instead of only adding an audit entry, so they need the device ID too.
+
+One release-order detail mattered. Before this change, the old start endpoint also set the session's AI status to `PROCESSING`, and a recent frontend change read `PROCESSING` as "the recording is already on the server". The new start no longer does that.
+
+So the API had to ship before the web change that calls `start`. I wrote that into the contract doc so nobody would deploy the web change first.
+
+## Claiming, beating and releasing on the client
+
+On the frontend, the lease lives in one composable, `useDeviceHold(sessionId)`, so the session page doesn't call the recording endpoints directly. Its state is created **per caller**, not at module level, because two session pages must never share a lease.
+
+`claim()` posts to `recording/start`. It returns `false` in exactly one case: another device holds the session. Every other failure lets the recording go ahead.
+
+For example, the backend refuses to start when the admin hasn't configured the AI key yet. Blocking the microphone over that would be wrong. The audio is still worth having, and the upload will report the missing key later.
+
+While the recording is running or paused, a heartbeat goes out every 30 seconds. That gives the two-minute window room for three missed beats before the lease goes stale. This is where it gets interesting: what does a failed heartbeat actually mean?
+
+```ts
+function isHoldLost(err: unknown): boolean {
+  const res = (err as ApiError)?.response;
+  if (res?.status !== 409) return false;
+  const reason = res.data?.data?.reasonCode;
+  return (
+    reason === "RECORDING_ON_OTHER_DEVICE" || reason === "RECORDING_NOT_HELD"
+  );
+}
+
+timer = setInterval(() => {
+  sendHeartbeat(sessionId, deviceId).catch((err) => {
+    // A dropped request is not a lost lease: the next beat retries,
+    // and the server only gives the session away after two quiet minutes.
+    if (!isHoldLost(err)) return;
+    stopHeartbeat();
+    toast.warning("This session's recording was taken over by another device");
+  });
+}, HEARTBEAT_MS);
+```
+
+Office Wi-Fi drops requests. If every failed heartbeat counted as a lost lease, a single timeout would tell the user their recording had been taken away while it was still fine. Only the two reason codes that really mean "you no longer hold this" stop the heartbeat.
+
+Notice that the code is read from `data.reasonCode`, not from the message. In production the global exception handler replaces error messages with a generic text, so a message is not something the client can match on.
+
+`release()` posts to `recording/stop` when a recording is discarded or fails to start. A successful upload releases the lease on the server, so after Stop the client just stops beating.
+
+## Handling a server that's wrong about the owner
+
+The page also has to decide, before anyone presses anything, whether to show "this session is being recorded on another device" and hide the Record button. The obvious rule is "the server has a live lease for a device that isn't me". That rule is wrong in one case that matters.
+
+The device ID lives in `localStorage`. The recordings live in IndexedDB on the same browser, and clearing one doesn't always clear the other.
+
+Suppose the browser crashed mid-recording, the ID was wiped, and the user comes back within two minutes. The server still has a live lease for the **old** ID. The browser now has a new one. By the obvious rule, the user would be locked out of their own recording by their own browser.
+
+So local audio counts as proof of ownership:
+
+```ts
+export function isRecordingElsewhere(
+  server: {
+    recordingActive?: boolean | null;
+    recordingDeviceId?: string | null;
+  },
+  myDeviceId: string,
+  hasLocalRecording: boolean,
+): boolean {
+  return (
+    server.recordingActive === true &&
+    !!server.recordingDeviceId &&
+    server.recordingDeviceId !== myDeviceId &&
+    !hasLocalRecording
+  );
+}
+```
+
+If this browser has an unfinished recording for the session (a metadata row that isn't marked completed), it is the real owner, whatever the server says. The recovery dialog takes over from there.
+
+Its Continue path calls `claim()` like a fresh start, so the server still has the last word: while the old lease is live the claim is refused, and once it goes stale the recording continues under the new ID.
+
+## Applying the same idea to the calendar
+
+Scheduling had the same shape: a rule the client can't fully see, so the server has to enforce it. A mentee booking a 1-on-1 only knows about their **own** sessions. They can't see that their supervisor already has a session at 10:00 with another mentee, and they shouldn't. QA found that a mentee could book a slot their supervisor had already given to someone else.
+
+The server now rejects a schedule that overlaps any active session of the owner or of the coach, each counted both as owner and as coach. Overlap is the usual half-open test, so a session ending at 10:00 doesn't clash with one starting at 10:00:
+
+```java
+return reqStart.isBefore(exEnd) && exStart.isBefore(reqEnd);
+```
+
+A clash returns **409 `SCHEDULE_CLASH`** with `conflictWith: OWNER | COACH`. The conflicting session's ID is included **only** for owner clashes. For a coach clash it would point at another mentee's session.
+
+To catch clashes before the user saves, a busy-slots endpoint returns the start and end times of a coach's sessions on a date, and nothing else, and only if the coach is the caller's own supervisor or an approved mentor. The client reads the reason code and the party, and builds its own message.
+
+All of these endpoints are POST, including the ones that are semantically updates. The client's API gateway rejects PATCH on these routes, so that's a gateway limitation, not a design choice. I documented it next to the service calls so nobody "fixes" it.
+
+## Wrapping up
+
+To recap: a random device ID read once per page, a lease on the session row that goes stale after two quiet minutes, a row lock that makes check-then-set atomic, a client that only gives up on the two reason codes that mean it, and local audio that outranks a stale server field. The lessons I'd keep:
+
+- **Leases with a timeout, not locks with an owner.** A lease that expires on its own needs no cleanup job and no "force unlock" button. The cost is one timestamp column and a two-minute wait in the worst case.
+- **Make check-then-set atomic, even when the race looks unlikely.** The row lock was a one-line annotation. Without it, the lease only worked when nobody tested it.
+- **Classify errors by what they mean for the user.** "The request failed" and "you lost the lease" are different events, and only one of them deserves a warning.
+- **Let the evidence on the device outrank a server field when the field can be stale.** Local chunks are harder proof of ownership than an ID in `localStorage`.
+
+What I'd explore next is the device ID's weakness, which is exactly that `localStorage` can be wiped while IndexedDB survives. Storing the ID next to the recording metadata, in IndexedDB, would make the two disappear together and remove most of the special case.
+
+The lease protects the upload. What happens after the upload, a slow AI pipeline and how to show its progress honestly, is in the [next article](/works/honest-ai-progress). Thanks for following along.

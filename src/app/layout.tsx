@@ -4,44 +4,48 @@ import "./globals.css";
 
 import { Inter } from "next/font/google";
 
+import ConsoleEgg from "@/components/ConsoleEgg";
+import ContactPanel from "@/components/ContactPanel";
 import Navbar from "@/components/Navbar";
+import PageTransition from "@/components/PageTransition";
 import SmoothScroll from "@/components/SmoothScroll";
 
 const inter = Inter({
   subsets: ["latin"],
   // Render immediately in the fallback face rather than blocking text paint on
-  // the webfont — this is the difference between a fast and a blocked FCP.
+  // the webfont. This is the difference between a fast and a blocked FCP.
   display: "swap",
   variable: "--font-inter",
 });
 
+const TITLE = "Mario Daruranto | Frontend Engineer";
+const DESCRIPTION =
+  "Frontend engineer and designer in Kupang, East Nusa Tenggara. Selected works: write-ups of features I've built for production products.";
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://azlhart.com"),
-  title: "Azlhart® — Independent Creative Studio",
-  description:
-    "Independent creative studio shaping digital worlds with motion, precision, and bold expression. Branding, UI/UX design, and web development by Mario Daruranto.",
+  title: TITLE,
+  description: DESCRIPTION,
   keywords: [
-    "creative studio",
-    "web design",
-    "framer",
+    "frontend engineer",
+    "react",
     "next.js",
-    "branding",
+    "typescript",
+    "web development",
     "UI/UX",
   ],
   authors: [{ name: "Mario Daruranto" }],
   openGraph: {
     type: "website",
     siteName: "Azlhart®",
-    title: "Azlhart® — Independent Creative Studio",
-    description:
-      "Independent creative studio shaping digital worlds with motion, precision, and bold expression.",
+    title: TITLE,
+    description: DESCRIPTION,
     images: ["/images/hero-thumbnail.webp"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Azlhart® — Independent Creative Studio",
-    description:
-      "Independent creative studio shaping digital worlds with motion, precision, and bold expression.",
+    title: TITLE,
+    description: DESCRIPTION,
     images: ["/images/hero-thumbnail.webp"],
   },
 };
@@ -59,8 +63,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${inter.className}`}>
       <body className="relative antialiased">
-        <Navbar />
-        <SmoothScroll>{children}</SmoothScroll>
+        <PageTransition>
+          <ContactPanel>
+            <Navbar />
+            <SmoothScroll>{children}</SmoothScroll>
+            <ConsoleEgg />
+          </ContactPanel>
+        </PageTransition>
       </body>
     </html>
   );

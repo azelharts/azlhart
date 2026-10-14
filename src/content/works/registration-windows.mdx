@@ -1,0 +1,237 @@
+export const metadata = {
+  title: "Dates that mean the same thing in every timezone",
+  summary:
+    "How I let recruiters set when a vacancy opens and closes, in a business that runs on UTC+7 with admins who don't. Most of the work was in edits, defaults and day boundaries, not the date picker.",
+  context: "Career & hiring platform",
+  role: "Frontend engineer",
+  stack: ["React 18", "TypeScript", "dayjs", "react-hook-form", "Zod"],
+  year: "2026",
+  readingTime: "8 min read",
+  highlights: [
+    "Recruiters set registration windows for a UTC+7 business, but admins open the form in other timezones.",
+    "Every value is converted to UTC+7 at the boundary, snapped to whole days and labelled WIB on screen.",
+    "Editing an ongoing vacancy leaves an untouched start date out, so the backend never sees a false move.",
+  ],
+};
+
+The product is a career platform with a hiring dashboard that enterprise partners use to post vacancies and screen applicants. Each partner gets its own careers site, and the server tells the frontend, per tenant, which form fields exist and which are required.
+
+Until this change, a vacancy had a start date and that was it. It opened when it was published and stayed open until someone closed it by hand. Partners running large hiring rounds wanted a real **registration window**: applications open on a given date, close on another, or stay open with "no end date" ticked. The vacancy cards on the dashboard should show the window, and warn when a vacancy is about to close.
+
+On paper it's two date pickers and a checkbox. The PR ended up as 8 files, about +350 lines, and thirteen sub-commits. Eight of those thirteen were fixes to timezone and edit edge cases found during review and QA.
+
+In this article, I'll walk you through those edge cases: where the browser's timezone sneaks in, how days get snapped, and why an edit sometimes has to leave a field out.
+
+## The problem: one business clock, many browsers
+
+The business runs on Western Indonesia Time, UTC+7. When a recruiter says registration closes on the 14th, they mean the end of the 14th **in UTC+7**, and that's what candidates are told.
+
+But the people setting the dates aren't all in that zone. An admin travelling, or sitting in another office, opens the same form in a browser whose local zone is something else.
+
+`dayjs()` with no zone means "the browser's zone". Every place that silently used it produced a date that was right in Jakarta and off by a day somewhere else. The fix was the same each time: say the zone out loud.
+
+Here's the path a date takes through the form:
+
+<Flow
+  caption="A registration date, from server to payload"
+  nodes={[
+    { id: "iso", label: "Stored ISO timestamp", note: "from the server" },
+    { id: "prefill", label: "Prefill in UTC+7", note: "Asia/Jakarta" },
+    { id: "picker", label: "Picker shows WIB", note: "tomorrow onward" },
+    { id: "snap", label: "Snap to whole days", note: "startOf / endOf" },
+    { id: "ongoing", label: "Ongoing, start same?", note: "on edit, by day" },
+    { id: "sent", label: "Start sent" },
+    { id: "omitted", label: "Start left out" },
+  ]}
+  layout={[
+    ["iso", "prefill", "picker"],
+    ["snap", "ongoing"],
+    ["sent", "omitted"],
+  ]}
+  edges={[
+    ["iso", "prefill"],
+    ["prefill", "picker"],
+    ["picker", "snap", "submit"],
+    ["snap", "ongoing"],
+    ["ongoing", "sent", "no"],
+    ["ongoing", "omitted", "yes"],
+  ]}
+/>
+
+## Making it a per-tenant field
+
+Let's start with the form. Not every partner wants the field. The server's form config already had a three-way setting for each field: hidden, optional or required. I added `custom_job_duration` to it. The field renders only when the setting is present, and the schema only demands values when it says required:
+
+```ts
+const schema = base
+  .extend({
+    starts_at: z.custom<Dayjs>().nullable().optional(),
+    ends_at: z.custom<Dayjs>().nullable().optional(),
+    no_end_date: z.boolean().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (config.custom_job_duration !== FieldConfig.Required) return;
+    if (!d.starts_at)
+      ctx.addIssue({
+        code: "custom",
+        path: ["starts_at"],
+        message: t("start_required"),
+      });
+    if (!d.no_end_date && !d.ends_at)
+      ctx.addIssue({
+        code: "custom",
+        path: ["ends_at"],
+        message: t("end_required"),
+      });
+  });
+```
+
+Notice the `z.custom<Dayjs>()`. It keeps the form value as a dayjs object, which is what the picker works with, instead of converting to strings and back on every keystroke.
+
+The end date is only required when "no end date" isn't ticked. Ticking it also clears and disables the end picker, so a stale end date can't hide behind the checkbox and get submitted anyway.
+
+## Rendering in business time, whatever the browser
+
+The pickers display `DD MMMM YYYY HH:mm [WIB]`. The `[WIB]` is a literal in the format string, and it matters more than it looks: it tells an admin outside UTC+7 that the times aren't theirs.
+
+That label is only true if the value is actually in UTC+7. On edit, the server sends ISO timestamps. The first version put them straight into the picker with `dayjs(iso)`, which displays them in the browser's zone. For an admin in UTC+8, a window that closes at the end of the 14th Jakarta time showed as 00:59 on the 15th.
+
+The fix is to convert at the boundary, when the form is prefilled. Here's what that looks like:
+
+```ts
+const BUSINESS_TZ = "Asia/Jakarta";
+
+prefill.starts_at = () => {
+  if (vacancy.registration_starts_at)
+    setValue(
+      "starts_at",
+      dayjs(vacancy.registration_starts_at).tz(BUSINESS_TZ),
+    );
+};
+prefill.ends_at = () => {
+  if (vacancy.registration_ends_at)
+    setValue("ends_at", dayjs(vacancy.registration_ends_at).tz(BUSINESS_TZ));
+  setValue("no_end_date", !vacancy.registration_ends_at);
+};
+```
+
+Every value enters the form already in UTC+7, so everything downstream can trust it. And "no end date" isn't stored at all: it's derived on prefill from the end date being null.
+
+### Disabling past days, in the right zone
+
+The pickers block days before tomorrow. "Tomorrow" is a business-calendar idea, so the comparison happens in UTC+7 on both sides:
+
+```ts
+const disabledDate = (date: Dayjs) =>
+  dayjs(date)
+    .tz(BUSINESS_TZ)
+    .isBefore(dayjs().tz(BUSINESS_TZ).add(1, "day").startOf("day"));
+```
+
+An earlier version compared against the browser's "now". Late in the evening in one zone, that's already tomorrow in Jakarta, or not yet, and the picker offered or blocked the wrong day.
+
+Blocking today as well, not just the past, was a UX call made in the same PR: the earliest window a recruiter can schedule starts tomorrow.
+
+## Snapping to whole days
+
+Recruiters pick days, not instants. On submit, the start is snapped to the start of its day and the end to the end of its day, both on the UTC+7 values from the picker:
+
+```ts
+payload.registration_starts_at = form.starts_at
+  ? form.starts_at.startOf("day").toISOString()
+  : null;
+payload.registration_ends_at =
+  form.ends_at && !form.no_end_date
+    ? form.ends_at.endOf("day").toISOString()
+    : null;
+delete payload.no_end_date; // UI-only
+```
+
+So "closes on the 14th" means the 14th is still a full day for applicants, whatever time the picker happened to hold. `no_end_date` is a UI concept, so it's removed before the payload is sent rather than leaking into the API.
+
+## The edit that must not resend the start
+
+This is where it gets interesting. This one took three sub-commits to get right.
+
+The backend treats `registration_starts_at` in an update as a **change to the start**, and it validates it. Editing a vacancy whose registration has already opened, to fix a typo in the description, resent the original start date, now in the past, and the backend read it as the recruiter moving the start.
+
+The rule we settled on: if registration has already started and the recruiter didn't touch the start date, leave it out of the payload.
+
+```ts
+const original = vacancy.registration_starts_at;
+const edited = form.starts_at;
+
+const isOngoing = original && !dayjs(original).isAfter(dayjs(), "day");
+const isUnchanged = original && edited && dayjs(original).isSame(edited, "day");
+
+if (isOngoing && isUnchanged) delete payload.registration_starts_at;
+```
+
+There are two details to notice here:
+
+- **"Started" includes today.** An earlier version missed vacancies whose registration opened today, so they still sent their start. That was the "today ongoing" fix.
+- **"Unchanged" is compared at day granularity.** Comparing exact instants would call it a change every time: the form value went through a timezone conversion and a `startOf("day")`, so the milliseconds never match the stored value even when the recruiter didn't touch the field. Comparing by day matches what the recruiter can actually see and change.
+
+If the recruiter _does_ move the start of an ongoing vacancy, it's sent, and the backend decides whether that's allowed.
+
+## Showing the window on the card
+
+Vacancy cards show a date chip. That chip now has three cases, because old vacancies exist and tenants without the field still exist:
+
+1. Field enabled and both dates set: the full range, `03 Feb 2026 00:00 WIB - 14 Feb 2026 23:59 WIB`.
+2. Field enabled, start only (no end date): "started on 03 Feb 2026".
+3. Otherwise: the old behaviour, based on the vacancy's original `starts_at`.
+
+Next to it, a warning badge says "closes in N days" when the end is between zero and three days away. Here's how the count is computed:
+
+```ts
+const daysLeft = useMemo(() => {
+  if (!endsAt) return null;
+  const end = dayjs(endsAt).tz(BUSINESS_TZ);
+  const today = dayjs().tz(BUSINESS_TZ).startOf("day");
+  return end.diff(today, "day");
+}, [endsAt]);
+
+const showWarning = daysLeft !== null && daysLeft >= 0 && daysLeft <= 3;
+```
+
+Diffing against **today's start of day** in UTC+7 counts calendar days on the business clock: a vacancy that closes at the end of Friday says three days all through Tuesday, for every admin. Like everything else here, the badge was first written in the browser's zone and moved to UTC+7 in a later commit.
+
+The organisation-level dates for mass-hiring rounds live in a separate modal. It had the same problem, so it got the same treatment: values converted to UTC+7 when loaded, and the `[WIB]` label on both pickers.
+
+<Callout label="lesson">
+  A date without a zone is a guess about the user's location. Pick the one zone
+  that matters to the business, convert into it at every boundary, and label it
+  on screen so nobody has to guess.
+</Callout>
+
+## A smaller pattern from the same week
+
+A related fix had the same flavour: a validation rule that depends on server config. The national-ID field on the candidate profile had a hard-coded minimum of 16 characters, and the length needed to become a per-tenant setting. It comes from the `features` config, which loads asynchronously, while the form is created when the profile modal mounts.
+
+I didn't want the validation to depend on whether the config had arrived before the form was created, or to rebuild the form (and lose what the user typed) when it did. Instead, the schema doesn't capture the number. It captures a getter that reads a ref, and the ref is refreshed on every render:
+
+```ts
+const featuresRef = useRef(features);
+featuresRef.current = features;
+
+const getMinLength = () =>
+  featuresRef.current?.job_portal?.config?.id_min_length ?? 16;
+
+// inside superRefine:
+if (value.national_id.length < getMinLength()) ctx.addIssue(/* ... */);
+```
+
+The rule is evaluated at validation time, so it always sees the latest config, without a stale closure and without remounting the form. The default stays 16 for every tenant that doesn't set it.
+
+## Wrapping up
+
+To recap, the parts I'd keep: one named business zone, converted into at prefill, at the disabled-date check, and for the badge. Day-granularity comparisons wherever the user thinks in days. And fallbacks that keep old vacancies rendering exactly as before.
+
+There are a few things I'd explore next:
+
+- **Moving the zone into config.** The zone is a hard-coded string in several files. That's simple and correct for a business that runs on one clock, but a second region would mean hunting for it. It belongs in the tenant config, behind one helper.
+- **Fixing the last browser-zone check.** The "is ongoing" check in the submit hook still compares against the browser's today, not UTC+7. Near midnight, for an admin far from Jakarta, it can disagree with the rest of the form by a day. It's the same bug as the others, in the one place I didn't move.
+- **Checking end against start.** The schema doesn't check that the end comes after the start. Both pickers block the past, but nothing stops an end date before the start date. A cross-field rule in the same `superRefine` would close that.
+
+The same dashboard also needed a [candidate blacklist](/works/candidate-blacklist) that had to stay consistent across five screens. Give it a read if you'd like to see the other side of the dashboard.

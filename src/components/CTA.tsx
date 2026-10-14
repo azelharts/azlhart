@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { cn } from "@/lib/utils";
 import ScrambleText from "./ScrambleText";
 
@@ -7,9 +9,12 @@ interface CTAProps {
   text: string;
   className?: string;
   ctaIcon?: boolean;
+  /** Renders a link instead of a button. */
+  href?: string;
+  onClick?: () => void;
 }
 
-const CTA = ({ text, className, ctaIcon = false }: CTAProps) => {
+const CTA = ({ text, className, ctaIcon = false, href, onClick }: CTAProps) => {
   return (
     <div className={cn("flex items-center justify-end gap-x-2", className)}>
       <ArrowRight
@@ -18,9 +23,15 @@ const CTA = ({ text, className, ctaIcon = false }: CTAProps) => {
         strokeWidth={1}
         className={ctaIcon ? "cta-icon-responsive" : "icon-responsive"}
       />
-      <button>
-        <ScrambleText text={text} />
-      </button>
+      {href ? (
+        <Link href={href}>
+          <ScrambleText text={text} />
+        </Link>
+      ) : (
+        <button type="button" onClick={onClick}>
+          <ScrambleText text={text} />
+        </button>
+      )}
     </div>
   );
 };

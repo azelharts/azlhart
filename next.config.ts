@@ -1,9 +1,16 @@
 import type { NextConfig } from "next";
+import createMDX from "@next/mdx";
+import remarkGfm from "remark-gfm";
+import rehypePrettyCode from "rehype-pretty-code";
+import rehypeSlug from "rehype-slug";
 
 const YEAR = 60 * 60 * 24 * 365;
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+
+  // Notes are authored as .mdx files under src/content and imported as pages.
+  pageExtensions: ["ts", "tsx", "md", "mdx"],
 
   images: {
     // AVIF first — roughly 30% smaller than WebP at equal quality. Next falls
@@ -44,4 +51,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Highlighting happens at build time, so an article ships as static HTML with
+// no highlighter in the client bundle.
+const withMDX = createMDX({
+  options: {
+    remarkPlugins: [remarkGfm],
+    rehypePlugins: [
+      // Heading ids feed the article's table of contents.
+      rehypeSlug,
+      [
+        rehypePrettyCode,
+        { theme: "vesper", keepBackground: false, defaultLang: "ts" },
+      ],
+    ],
+  },
+});
+
+export default withMDX(nextConfig);

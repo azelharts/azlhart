@@ -1,0 +1,187 @@
+export const metadata = {
+  title: "Editing 1,800 strings without deleting any",
+  summary:
+    "How I built an admin screen for editing the app's English and Indonesian copy on top of an API that replaces whole namespaces on every write, where one careless save could blank hundreds of strings.",
+  context: "Enterprise mentoring platform",
+  role: "Frontend engineer",
+  stack: ["Next.js", "React", "TypeScript", "TanStack Query", "nuqs", "Jest"],
+  year: "2026",
+  readingTime: "7 min read",
+  highlights: [
+    "The locale API replaces a whole namespace on every PATCH, so sending only the edits would blank the rest.",
+    "Each save rebuilds touched namespaces in full, after checking the baseline is loaded and fresh per language.",
+    "Placeholder mismatches block the save, and a build-time scan shows which pages render each key.",
+  ],
+};
+
+The product is a mentoring module inside a larger HR platform, used in English and Indonesian. All of its interface copy lives in locale catalogues: about 1,800 keys across 12 namespaces, per language. Until this feature, changing a word on screen meant an engineer editing JSON in the monorepo and running a sync script.
+
+In other words, a typo in a button label cost a pull request.
+
+So I built `/admin/translations`, a page where someone with the right permission edits the copy directly. It needed no backend change. It talks to the locale API that already existed, one GET and one PATCH per language. In this article, I'll walk you through why most of the work went into making that PATCH safe to call, and the guards that came out of it.
+
+<Stats
+  items={[
+    { value: "~1,800", label: "Keys per language" },
+    { value: "12", label: "Namespaces" },
+    { value: "~0.35 s", label: "Key-usage scan at build" },
+  ]}
+/>
+
+Here's what happens between clicking Save and the copy changing:
+
+<Flow
+  caption="What a save goes through"
+  nodes={[
+    { id: "edits", label: "Local edits", note: "not in query cache" },
+    { id: "baseline", label: "Baseline loaded", note: "both languages" },
+    { id: "stale", label: "Stamp unchanged", note: "per language" },
+    { id: "tokens", label: "Placeholder sets", note: "edited rows only" },
+    { id: "payload", label: "Whole namespaces", note: "edits over copy" },
+    { id: "patch", label: "PATCH per language", note: "touched only" },
+    { id: "cache", label: "Query cache", note: "new baseline" },
+  ]}
+  layout={[
+    ["edits", "baseline", "stale"],
+    ["tokens", "payload", "patch"],
+    ["cache"],
+  ]}
+  edges={[
+    ["edits", "baseline"],
+    ["baseline", "stale"],
+    ["stale", "tokens"],
+    ["tokens", "payload"],
+    ["payload", "patch"],
+    ["patch", "cache", "saved row"],
+  ]}
+/>
+
+## The problem: the API deletes what you don't send
+
+Let's start with the behaviour that shaped everything else. The locale PATCH merges one level deep. Send `{ "session": { "title": "…" } }` and the backend replaces the whole `session` namespace with an object containing one key. Every other key in that namespace is gone.
+
+A missing key doesn't throw anywhere, either. The interface just renders blank where the text used to be.
+
+That means the editor can never send "just the edits". Every save has to rebuild each touched namespace **completely** from the loaded copy, with the edits laid over it. Here's what that looks like:
+
+```ts
+function buildPayload(original: Catalogue, edits: Edits): Catalogue {
+  const payload: Catalogue = {};
+  for (const [fullKey, value] of Object.entries(edits)) {
+    const parsed = parseFullKey(fullKey); // "ns:a.b" -> { namespace, key }
+    if (!parsed) continue;
+    const entries = payload[parsed.namespace] ?? {
+      ...original[parsed.namespace],
+    };
+    entries[parsed.key] = value;
+    payload[parsed.namespace] = entries;
+  }
+  return payload; // only touched namespaces, each one whole
+}
+```
+
+Notice that the first edit in a namespace starts from a full copy of the original, and later edits land on top of it. The result contains only the namespaces someone touched, but each one is whole.
+
+That includes keys the current search or filter is hiding. A namespace built from the visible rows alone would delete everything the editor scrolled past.
+
+Edits live in local state in a hook, not in the query cache, so a background refetch can't silently drop work in progress. Typing a value back to its stored form removes the edit, so the dirty count stays honest about what a save will rewrite.
+
+## Guards before the write
+
+Once "the payload is the whole namespace" is the rule, the remaining risk is building that payload from the wrong baseline. Three guards run before any request goes out. Let's go through them one at a time.
+
+### Failing closed on a missing catalogue
+
+If one language's GET failed or never finished, its loaded copy is `{}`. A save would then rebuild every touched namespace from nothing. The Save button is disabled unless both languages loaded, and the save function checks again itself, so no future caller can skip it:
+
+```ts
+function assertBaselineLoaded(languages: Lang[], loadedAt: Stamps) {
+  if (languages.some((lang) => !loadedAt[lang])) {
+    throw new UnverifiableTranslationsError();
+  }
+}
+```
+
+It's a tiny function, but putting the check inside the save path (and not only on the button) is the point. The UI can change; the guard stays.
+
+### Refusing to overwrite someone else's publish
+
+Two admins can have the page open at once. Because a save replaces whole namespaces, the second save would quietly revert the first one's work. So right before writing, the editor re-reads each language's `updated_at` and compares it with the stamp it loaded.
+
+This is where it gets interesting. The first version compared one "newest stamp" across both languages, and review caught the problem: an Indonesian publish by someone else blocked an English-only save with a false conflict, even though a PATCH only rewrites one language's row.
+
+The check is now per language, and only for the languages being written. The stamps are compared as points in time, `Date.parse(a) !== Date.parse(b)`, not as strings. And if the fresh read comes back with no stamp, that can't prove the copy is fresh either, so it also refuses.
+
+### Comparing placeholders as sets
+
+i18next interpolation tokens like `{{count}}` are where translators make the mistake no type check catches. Drop or rename one and the user sees literal braces. An edited row whose tokens differ between English and Indonesian blocks the save.
+
+They're compared as **sets**, not sequences. Word order legitimately differs between the two languages, so `{{count}} of {{total}}` against `{{total}} dari {{count}}` is a correct translation.
+
+Two more rules keep the check fair. Rows where one side is still empty are skipped: an untranslated key is a gap to fill, and blocking on it would make a half-finished namespace impossible to save. And only edited rows are checked, because a mismatch someone else left elsewhere in the catalogue isn't this editor's fault.
+
+## After the write
+
+The publish confirmation names the backend it's about to write to, and warns loudly when that's production. The environment is read from the API host, not a build flag, so it can't disagree with where the PATCH actually lands.
+
+An unrecognised host counts as production. Guessing "development" on a real environment would mean an unguarded write to live copy.
+
+Saving sends one PATCH per language, each carrying only the namespaces an edit touched. Here's the loop:
+
+```ts
+for (const lang of languagesWithEdits) {
+  const saved = await patchLocale(
+    lang,
+    buildPayload(original[lang], edits[lang]),
+  );
+  queryClient.setQueryData(localeKey(lang), saved); // new rows + new baseline
+  setEdits((cur) => ({ ...cur, [lang]: {} })); // clear only what landed
+}
+```
+
+Two details in there matter more than they look.
+
+**Writing the response into the cache.** The PATCH answers with the saved row and its new stamp. Waiting on a background refetch would leave a window: an admin who made a second edit before the refetch landed was editing on top of the pre-save copy, and the next save reverted the first. Now the response goes straight into the query cache, so the rows and the stale-check baseline are current as soon as the save lands.
+
+**Clearing edits per language.** If English succeeds and Indonesian fails, only the Indonesian edits remain, and a retry resends only Indonesian. Clearing everything at the end would either lose the failed edits or resend English on top of itself.
+
+## Finding the string you want to change
+
+The first version made editors pick a namespace before seeing anything. Finding the key behind some text on a page meant guessing among 12 namespaces.
+
+So all namespaces now load at once, about 180 KB per language, and search runs across the key and both languages' text. Namespace, page, search, an untranslated-only toggle and the page number all live in the URL through nuqs, so you can share a filtered view. Rows are paged 50 at a time, because 1,800 rows of paired textareas is too heavy to render at once.
+
+One filter bug was subtle. Every filter reads the value being typed into. Search for a phrase, change that phrase, and the row stops matching and disappears mid-keystroke, taking the focused field with it. An edited row now always stays visible. It only drops out of the results once its edit is saved or discarded.
+
+### Which pages render this key?
+
+Editors also need to know where a key shows up, and nothing recorded that. I wrote a small Node script, about 240 lines, that builds the map from the code. It runs as `prebuild` in about 0.35 seconds, so every deploy regenerates it. It works in two steps:
+
+- **Key to file.** It collects every `"ns:key"` string literal in the source, not only those inside `t()` calls, so keys kept in lookup maps and passed to `t()` as a variable still count. A template key with fixed text around the interpolation becomes a regex. A template with no fixed text at all, just a namespace and a variable, is skipped, since it would claim every key in the namespace.
+- **File to route.** It builds the import graph from each `app/**/page.tsx`, plus the layout, loading and error boundaries of every segment above it, and walks it to find which routes reach which files.
+
+The output is deliberately boring to diff: a sorted route table, then one key per line pointing at route indexes. It never contains file paths or line numbers, so it only changes when a key starts or stops appearing on a page, not every time someone moves a component.
+
+Each row in the admin then shows its pages as links, or says plainly that the key is in code but on no page, or not found in code at all. One known limit is written in the PR: a key assembled at runtime from a variable with no fixed text reads as "not found in code".
+
+<Callout label="lesson">
+  When the API's write semantics are destructive, the client owns the safety.
+  Every guard here exists because the obvious payload would have been accepted
+  without complaint and deleted something.
+</Callout>
+
+## Testing it against the real semantics
+
+Unit tests cover the pure pieces: payload building, placeholder sets, stale-stamp comparison, row visibility. But the bugs that matter here only show up across a full save.
+
+The integration test drives the real page against an in-memory fake backend that copies the locale API's semantics: key filtering and the one-level merge. If the page ever sends a partial namespace, the fake deletes the missing keys just like production would, and the test sees blank rows. It uses real keys, so the page badges come from the committed scan.
+
+## Wrapping up
+
+To recap: the API replaces whole namespaces, so the client always sends whole namespaces, checks that its baseline is loaded and fresh per language, compares placeholders as sets, and writes the PATCH response straight into the cache. A build-time scan then tells editors where each key actually appears.
+
+I'd keep the order the work went in: pin down exactly what the API does with a payload, then design every guard against that behaviour rather than against the happy path.
+
+What I'd explore next is upstream. A PATCH that deletes omitted keys is the root cause, and every guard in this page is compensating for it. A key-level update endpoint with an `updated_at` precondition would let the server enforce what the client currently has to promise. For a first version, needing no backend change was worth it. For a second one, I'd push that rule down to the API.
+
+If you'd like another integration where the status codes and side effects of someone else's API shaped the design, have a look at [Outlook changes in seconds, not sweeps](/works/calendar-webhooks). Happy building!

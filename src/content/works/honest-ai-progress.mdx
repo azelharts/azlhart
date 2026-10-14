@@ -1,0 +1,198 @@
+export const metadata = {
+  title: "Honest progress bars for a slow AI pipeline",
+  summary:
+    "How I replaced a made-up progress bar with one driven by the real AI job, plus the backend, timeout and prompt fixes it took before that bar had anything true to say.",
+  context: "Enterprise talent platform",
+  role: "Full-stack engineer",
+  stack: ["Vue 3", "TypeScript", "Java 21", "Spring Boot", "Vitest"],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "The progress bar was invented on the client, so a job that had failed looked the same as one halfway done.",
+    "The status endpoint now exposes the real job, and one pure function maps it to the bar, steps and retry route.",
+    "Failures point to the cheapest recovery the evidence supports, and timeout fixes stopped jobs dying at 80%.",
+  ],
+};
+
+Progress bars are small, but people stare at them. When the wait is a few minutes long and the thing being processed is an hour of someone's conversation, that little bar carries a lot of trust.
+
+The product here is a talent-management system for a large state-owned enterprise. Its 1-on-1 workspace records a coaching session in the browser and sends the audio through an AI pipeline: a speech-to-text model produces a transcript, an open-weight LLM summarises it against the competencies the session was meant to work on, and the result becomes a report with commitments for the employee's development plan.
+
+The pipeline is slow. Minutes, not seconds. For that whole time the user is looking at a progress card, and that card is the only thing telling them whether their conversation is turning into a report or quietly failing.
+
+In this article, I'll walk you through how I turned that card into something honest: what the backend had to expose, how the frontend maps a job to a bar, how failures point to the right next step, and the pipeline fixes that made the wait worth it.
+
+## The problem: a bar that was made up
+
+The progress bar that shipped first was invented on the client. On each poll it computed this:
+
+```ts
+progress = Math.min(90, 15 + i * 3); // i = poll count
+```
+
+Notice that nothing in there comes from the server. It climbs once per poll and tracks nothing. Under it were six step labels with no counterpart anywhere in the backend.
+
+A user watching it learned one fact: the page was still polling. A job that had already failed for good looked exactly like a job that was halfway done.
+
+The strange part was that the backend already knew. The AI job queue, which teammates built, keeps a row per job with its status, current stage, a progress number, an attempt count and an error message. None of it left the database. The only thing a client could read was the session's AI status, which says `PROCESSING` from upload to finish.
+
+Here's the path a job's state takes to the screen once the work below was done:
+
+<Flow
+  caption="From job row to progress card"
+  nodes={[
+    { id: "job", label: "AI job row", note: "status, progress" },
+    { id: "api", label: "GET /ai-status", note: "non-locking read" },
+    { id: "derive", label: "deriveProgress", note: "pure function" },
+    { id: "card", label: "Progress card", note: "four steps" },
+    { id: "route", label: "Retry route", note: "cheapest first" },
+  ]}
+  layout={[
+    ["job", "api", "derive"],
+    ["card", "route"],
+  ]}
+  edges={[
+    ["job", "api"],
+    ["api", "derive", "every 2 s"],
+    ["derive", "card", "percent, step"],
+    ["derive", "route", "if failed"],
+  ]}
+/>
+
+## Exposing the job without queueing behind it
+
+Let's start on the backend. I widened `GET /ai-status` with the job's status, stage, progress and attempt count. Three details mattered here.
+
+**The fields are absent when no job exists.** A session that was never recorded reports exactly what it did before, so existing clients don't change behaviour.
+
+**The error message appears only once the job has failed for good.** A job with retries left goes back to `QUEUED`. Its error describes one attempt, not the outcome, and showing it would announce a failure that might not happen.
+
+**The lookup uses a new non-locking finder.** The existing finder for "the job of this session" takes a `PESSIMISTIC_WRITE` lock, because the worker needs it. Reusing it in a status endpoint that the client polls every two seconds would have made each poll wait behind the very job it was asking about. It's an easy mistake to make, because the method name says nothing about the lock.
+
+### Facts the client can't infer
+
+This is where it gets interesting. The obvious next step on a failed job is "run the analysis again from the transcript", so the user doesn't have to upload the audio again. To offer that button, the client needs to know whether a transcript exists.
+
+Progress looked like it answered that. `80` means the pipeline reached the summarising stage, so transcription must have succeeded, right?
+
+It doesn't work that way. The transcript is written at the **end** of the pipeline, together with the report, so a job that died at 80 saved nothing. This wasn't hypothetical: the one failed job in the local database sat at progress 80 after a read timeout, and its transcript table was empty. A button based on the progress number would call an endpoint that answers "no transcript to regenerate from".
+
+So the endpoint now returns `hasTranscript`, using the same blank check as the regenerate endpoint. The first version was still wrong, which review caught. `/ai-status` is readable by the coach, but `/regenerate` is owner-only, so a coach would see a real transcript and a button the server refuses.
+
+The fix was a second flag, `canRegenerate`, which folds ownership in on the server. The rule lives in one place, and the client just reads it.
+
+## Mapping a job to a bar
+
+Now for the frontend. Everything the card shows comes from one pure function, `deriveProgress(reading, previousPercent)`. It has no Vue and no Web APIs in it.
+
+That's deliberate: test coverage excludes `.vue` files, and this is the logic worth testing. Its test oracles are real job rows I read while verifying the backend change.
+
+### Progress first, stage second
+
+Stage looked like the natural source for the step labels. Reading the queue code showed it isn't. Enqueue, complete and fail all clear the stage, so every finished or failed job has none. On top of that, the pipeline only emits some of the stages in its enum, and another backend variant emits a different subset.
+
+So the progress number is the primary signal, and the stage only refines the label when it's present. I cut the step list from six invented steps to four, each starting where the backend actually reports progress. Here's what that looks like:
+
+```ts
+const STEP_FLOOR = [0, 10, 80, 95]; // prepare, transcribe, analyse, write report
+
+function stepFromPercent(p: number): StepIndex {
+  for (let i = STEP_FLOOR.length - 1; i >= 0; i--) {
+    if (p >= STEP_FLOOR[i]) return i as StepIndex;
+  }
+  return 0;
+}
+
+const step =
+  (reading.stage && STAGE_TO_STEP[reading.stage]) ?? stepFromPercent(percent);
+```
+
+The loop walks the floors from the top down and returns the first one the percentage has passed. Values between the floors still land on the right step, so a stage that's never emitted leaves no gap.
+
+### Never backwards, except when it should be
+
+Polls can arrive out of order, so within one attempt the bar takes `max(previous, reported)`. A bar that flickers backwards only confuses people.
+
+A retry is different. When a job goes back to `QUEUED` with attempts above zero, the backend resets its progress to 0. Holding on to the old number would then show "Transcribing" at 80%: the label follows the stage back, but the number doesn't.
+
+A new attempt really does start from the beginning, so the bar does too, and the card says it's retrying rather than showing silence:
+
+```ts
+const retrying = !failed && status === "QUEUED" && attempts > 0;
+const percent = retrying
+  ? (reported ?? 0)
+  : Math.max(previousPercent, reported ?? previousPercent);
+```
+
+Notice how the retry branch is the only place the bar is allowed to drop. Everywhere else, the previous value acts as a floor.
+
+### What counts as failed
+
+Two readings looked like failure and weren't.
+
+**`UNAVAILABLE` on its own.** The status endpoint maps a null AI status to `UNAVAILABLE`, so a session that had never been recorded reported the same thing as one whose analysis had given up. Reading that as failure sent freshly scheduled sessions straight to the "analysis failed" screen, without a Start button. The pipeline only runs after an upload, so without a job nothing can have failed. Failure now requires a job to exist.
+
+**A finished verdict during a re-run.** Regenerating from a transcript runs without a new job, so while the session is `PROCESSING` the job still shows the previous attempt's `COMPLETED` or `FAILED`. That verdict belongs to the old run and is ignored. Otherwise the page would open the old report, or the failure card, the moment the user pressed "run again".
+
+## Failures that tell you who should act
+
+A failure card is only useful if it says what to do next, and two kinds of failure need different answers.
+
+The backend stages the uploaded audio in memory for 30 minutes. A job that lands on another instance fails with "no longer staged", and only re-sending the recording helps. Every other failure leaves the audio intact, and only the analysis has to run again. A single "failed" message couldn't tell the two apart.
+
+The recovery route is picked in order, from what the server and the device can each prove:
+
+```ts
+function retryRoute(
+  failed: boolean,
+  canRegenerate: boolean,
+  hasLocalRecording: boolean,
+  canRetryUpload: boolean,
+) {
+  if (!failed) return "none";
+  if (canRegenerate) return "regenerate"; // transcript on the server
+  if (canRetryUpload) return "retry"; // audio stored on the server
+  return hasLocalRecording ? "reupload" : "none"; // audio in this browser
+}
+```
+
+The order is the point: the cheapest recovery that the evidence supports wins. A transcript beats stored audio, and stored audio beats a copy in this browser.
+
+The copy follows the route. The old text always said "contact the admin", even right next to a button the user could press. For a coach, who has no button, it now names the person who actually holds the recording: the mentee who recorded it, in their browser.
+
+One QA bug came from the step list. A failed job keeps its last progress, so the step at 80 kept spinning beside the "analysis failed" box. Steps now have five states, `done`, `active`, `stalled`, `failed` and `pending`, and the spinner only belongs to `active`.
+
+<Callout label="lesson">
+  A progress bar is a claim. If no field in the backend can back it up, it is
+  decoration, and it will be most wrong exactly when the user needs it.
+</Callout>
+
+## Making the pipeline worth waiting for
+
+That failed row at progress 80 was a clue. Real jobs were dying at the summarising stage, every run, and giving up after three attempts.
+
+The cause was a timeout. The summarise call went through the global HTTP client, whose default socket timeout is 60 seconds, and ignored the configured AI timeout that the speech-to-text client already honoured. Measured against the client's AI gateway, the model answered at about 29 tokens per second, and the full prompt took around 120 seconds, even for a 40-second recording. The call now uses the configured read timeout, 600 seconds by default, through a per-request override.
+
+The prompt was too big because it carried every competency gap in the employee's whole development plan. It now carries only the session's own objectives: the competencies of the linked activity, or else the top three gaps, and none at all for a confidential session. The report's coverage numbers are computed over the same list, so the report and the session's objectives card agree.
+
+The model's "thinking mode" is switched off through a config flag, because it was breaking the JSON output.
+
+### What the model shouldn't decide
+
+Some changes were about taking decisions away from the model:
+
+- **Commitments are no longer linked to competencies by the AI.** In user testing the guesses were often wrong, and the mentee had no way to correct them from the report. The link to the activity stays.
+- **The coach reflection is visible only to the coach who ran the session.** It assesses the mentor, not the mentee. The mapper takes that decision as a required boolean, so a new caller can't leak it by forgetting a parameter. For other readers the field is **absent**, not empty: "you may not see this" and "the AI found nothing" are different answers.
+- **The coaching-question rubric is only sent for coaching sessions.** Inside a mentoring report, the model ignored "skip this for mentoring" and graded the mentor on coaching technique anyway. Role names now follow the session type too, so a coaching report stops saying "mentor" and "mentee".
+
+The prompts live in config rows, so each environment keeps its own wording. Changes ship as SQL scripts run per environment. They back up the old prompt, are safe to re-run, and check their own end state.
+
+## Wrapping up
+
+Looking back, a few habits did most of the work:
+
+- **Read before you render.** Half of this work was finding out what the backend really emitted: stages cleared on finish, a transcript written last, a status that turns null into "unavailable".
+- **Put the rules the client can't verify on the server.** `canRegenerate` exists because the client was guessing ownership and transcript state from numbers that couldn't tell it.
+- **Look at real rows, not the enum.** The job that failed at 80 explained both the missing transcript and the timeout. The fake bar had no way to show it.
+
+If you want to see how the audio reaches that pipeline in the first place, that's the subject of [the recorder note](/works/crash-safe-recorder). Happy building, and may your progress bars always tell the truth.

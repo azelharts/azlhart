@@ -1,15 +1,38 @@
 "use client";
 
-import { useRef } from "react";
-
-import Link from "next/link";
+import { useRef, useState } from "react";
 
 import { gsap, useGSAP, SplitText, EASE } from "@/lib/gsap";
 import { useFontsReady } from "@/lib/hooks";
-import { drukWide } from "@/lib/utils";
+import { cn, drukWide } from "@/lib/utils";
+import { pad } from "@/lib/works";
 
 import LogoSVG from "@/components/LogoSVG";
 import ScrambleText from "@/components/ScrambleText";
+import TransitionLink from "@/components/TransitionLink";
+
+import HeroCanvas from "./HeroCanvas";
+
+export interface HeroWork {
+  slug: string;
+  index: number;
+  title: string;
+}
+
+/**
+ * The logo-drawing intro is the site's opening, not something to sit through
+ * on every visit to the index: once it has played in this tab, coming back
+ * shows the hero in its finished state straight away.
+ */
+let introPlayed = false;
+
+/**
+ * The header line waits for the logo like the rest of the copy, but starts
+ * at opacity 0.001 rather than 0. That is invisible, yet still counts as the
+ * page's largest contentful paint: Chrome skips only opacity-0 elements, and
+ * with everything at 0 the index reported no LCP at all.
+ */
+const META_START = { opacity: 0.001 };
 
 /**
  * Logo start/end geometry per breakpoint. Driven through gsap.matchMedia() so
@@ -23,14 +46,22 @@ const LOGO_SIZES = {
   mobile: { width: 128, height: 70, widthAfter: 650, heightAfter: 350 },
 } as const;
 
-const HeroSection = () => {
+const HeroSection = ({
+  works,
+  total,
+}: {
+  works: HeroWork[];
+  total: number;
+}) => {
   const heroRef = useRef<HTMLElement>(null);
+  const mediaRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<SVGSVGElement>(null);
   const logoPathRef = useRef<SVGPathElement>(null);
-  const heroVideoRef = useRef<HTMLVideoElement>(null);
   const slideUpTextRefs = useRef<HTMLElement[]>([]);
 
   const fontsReady = useFontsReady();
+
+  const [hoveredWork, setHoveredWork] = useState<string | null>(null);
 
   const addToSlideupTextRefs = (element: HTMLElement | null) => {
     if (element && !slideUpTextRefs.current.includes(element)) {
@@ -52,7 +83,7 @@ const HeroSection = () => {
       if (!fontsReady) return;
 
       // Deliberately unscoped. The intro timeline below sequences the navbar
-      // too (#navbar, .fade-up-2, .fill-width), and those live outside
+      // too (#navbar, .fade-up-2), and those live outside
       // heroRef — scoping this to the hero silently stops them resolving, so
       // the navbar never gets revealed. None of these selectors collide with
       // anything else on the page.
@@ -96,15 +127,17 @@ const HeroSection = () => {
             height: size.height,
           });
 
-          // Reduced motion: show the finished state, skip the choreography.
-          // The navbar is `invisible` in CSS and revealed by the timeline
-          // below, so it has to be switched on explicitly here.
-          if (reduced) {
+          // Reduced motion, or a return visit: show the finished state and
+          // skip the choreography. The navbar is `invisible` in CSS and
+          // revealed by the timeline below, so it has to be switched on here.
+          if (reduced || introPlayed) {
             gsap.set([...copy, "#navbar", ".fade-up-2"], { autoAlpha: 1 });
-            gsap.set(heroRef.current, { autoAlpha: 1 });
+            gsap.set(".hero-meta", { opacity: 1 });
+            gsap.set(mediaRef.current, { opacity: 1 });
             gsap.set(logoRef.current, endGeometry);
             return;
           }
+          introPlayed = true;
 
           const headingSplit = SplitText.create(slideUpTextRefs.current, {
             type: "lines",
@@ -124,39 +157,36 @@ const HeroSection = () => {
           // The hero owns the whole intro, navbar included — the navbar's
           // items are meant to arrive late in this sequence, not on their own
           // clock.
-          tl.from(heroRef.current, { autoAlpha: 0 })
-            .from("#navbar", { autoAlpha: 0 })
+          tl.from("#navbar", { autoAlpha: 0 })
             .from(logoPathRef.current, {
               drawSVG: 0,
               duration: 3.75,
               ease: "power3.inOut",
             })
             .to(logoRef.current, { duration: 1.5, ...endGeometry })
-            .from(
-              heroVideoRef.current,
-              {
-                duration: 1.5,
-                opacity: 0,
-                onStart: () => {
-                  // Autoplay can be blocked by policy; the rejected promise is
-                  // otherwise unhandled and surfaces as a console error.
-                  heroVideoRef.current?.play().catch(() => {});
-                },
-              },
+            .fromTo(
+              mediaRef.current,
+              { opacity: 0 },
+              { duration: 1.5, opacity: 1 },
               "<",
+            )
+            .fromTo(
+              ".hero-meta",
+              { y: "35%", opacity: 0.001 },
+              { y: 0, opacity: 1, stagger: 0.075, ease: "power2.inOut" },
+              "-=1",
             )
             .from(
               ".fade-up",
               { y: "35%", opacity: 0, stagger: 0.075, ease: "power2.inOut" },
-              "-=1",
+              "<",
             )
             .from(
               ".fade-up-2",
               { y: "35%", opacity: 0, stagger: 0.075, ease: "power2.inOut" },
               "-=0.75",
             )
-            .from(".fill-width", { width: 0, stagger: { amount: 0.075 } })
-            .from(headingSplit.lines, { y: "100%", stagger: 0.075 }, "-=1");
+            .from(headingSplit.lines, { y: "100%", stagger: 0.075 }, "-=0.75");
 
           return () => headingSplit.revert();
         },
@@ -167,53 +197,58 @@ const HeroSection = () => {
 
   return (
     <section
-      // Starts hidden so the page opens on flat black. The intro timeline
-      // fades the section in, and the video fades in later on its own step —
-      // the poster must not be on screen before then.
-      className="invisible relative flex h-[100svh] flex-col overflow-clip"
+      // Not \`invisible\`: a hidden section leaves the page with no paint that
+      // counts as its largest contentful paint. It still opens on black,
+      // because the media and every line of copy start transparent.
+      className="relative flex h-[100svh] flex-col overflow-clip"
       ref={heroRef}
     >
-      <video
-        ref={heroVideoRef}
-        poster="/images/hero-thumbnail.webp"
-        // metadata, not none: the timeline calls play() ~4s in, and preload
-        //="none" makes that first frame arrive visibly late.
-        preload="metadata"
-        className="absolute-center h-full w-full object-cover brightness-50"
-        loop
-        muted
-        playsInline
-        aria-hidden="true"
-      >
-        <source src="/videos/hero-compressed.mp4" type="video/mp4" />
-      </video>
+      <div ref={mediaRef} className="absolute inset-0 opacity-0">
+        <HeroCanvas highlight={hoveredWork !== null} />
+        {/* Scrims under the header and the bottom copy, so text stays legible
+            over bright patches of the metal. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-1/5 bg-gradient-to-b from-black/50 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
+      </div>
+
+      {/* The wordmark lives in the footer now; the page still needs an h1. */}
+      <h1 className="sr-only">azlhart, studio of Mario Daruranto</h1>
 
       {/* Container */}
-      <div className="max-w-container px-container desktop:!pb-0 relative z-10 mx-auto h-full w-full">
+      <div className="max-w-container px-container relative z-10 mx-auto h-full w-full">
         <div className="custom-grid h-full gap-y-8">
           {/* Header */}
-          <header className="p-responsive relative z-20 col-span-full">
+          {/* On phones the navbar shares the top row, so the header starts below it. */}
+          <header className="p-responsive tablet:mt-0 relative z-20 col-span-full mt-12">
             <div
               className="desktop:flex-row flex flex-col gap-x-11 gap-y-4"
               id="hero-header"
             >
-              <p className="fade-up">Studio of Mario Daruranto</p>
-              <div className="fade-up flex flex-col gap-y-2">
+              <p className="hero-meta" style={META_START}>
+                Studio of Mario Daruranto
+              </p>
+              <div
+                className="hero-meta flex flex-col gap-y-2"
+                style={META_START}
+              >
                 <span>Designer</span>
                 <span>Developer</span>
               </div>
-              <div className="fade-up flex flex-col gap-y-2">
+              <div
+                className="hero-meta flex flex-col gap-y-2"
+                style={META_START}
+              >
                 <p>Kupang, East Nusa Tenggara</p>
-                <Link href="mailto:hello@azlhart.com">
-                  <ScrambleText text="hello@azlhart.com" />
-                </Link>
+                <a href="mailto:mariodaruranto68@gmail.com">
+                  <ScrambleText text="mariodaruranto68@gmail.com" />
+                </a>
               </div>
             </div>
           </header>
 
           <h2
             ref={addToSlideupTextRefs}
-            className={`hero-sub-heading tablet:col-start-4 desktop:col-start-7 tablet:-translate-y-20 desktop:-translate-y-0 tablet:col-span-5 z-10 col-span-4 ${drukWide.className}`}
+            className={`hero-sub-heading tablet:col-start-4 desktop:col-start-7 tablet:-translate-y-20 desktop:translate-y-40 tablet:col-span-5 desktop:col-span-6 z-10 col-span-4 ${drukWide.className}`}
           >
             “Turning brand <br />
             into tab everyone <br />
@@ -221,24 +256,69 @@ const HeroSection = () => {
           </h2>
 
           <div className="tablet:gap-y-8 z-10 col-span-full flex flex-col items-end justify-end gap-y-4">
-            <div className="tablet:grid-cols-8 desktop:grid-cols-12 tablet:text-lg grid w-full grid-cols-4">
-              <div className="tablet:gap-x-7 tablet:text-lg desktop:text-xl tablet:col-span-4 tablet:col-end-8 col-span-3 col-end-5 flex justify-end gap-x-3 text-base">
-                <span ref={addToSlideupTextRefs}>Independent</span>
-                <span ref={addToSlideupTextRefs}>Creative</span>
-                <span ref={addToSlideupTextRefs}>Studio</span>
-              </div>
+            <div className="tablet:grid-cols-8 desktop:grid-cols-12 tablet:text-lg tablet:mb-[9.5rem] desktop:mb-[16rem] mb-16 grid w-full grid-cols-4 items-end gap-y-6">
+              {/* Selected works, bottom left: the hero is the whole landing
+                  page, so this is its way further in. */}
+              <nav
+                aria-label="Selected works"
+                className="fade-up p-responsive tablet:col-span-3 tablet:row-start-1 col-span-full flex flex-col gap-y-3"
+                onMouseLeave={() => setHoveredWork(null)}
+              >
+                <span className="text-white/50">
+                  SELECTED WORKS ({pad(total)})
+                </span>
+                <ol className="flex flex-col border-t border-white/20">
+                  {works.map((w, i) => (
+                    <li
+                      key={w.slug}
+                      className={cn(
+                        "border-b border-white/20",
+                        i >= 4 && "tablet:block hidden",
+                      )}
+                    >
+                      <TransitionLink
+                        href={`/works/${w.slug}`}
+                        onMouseEnter={() => setHoveredWork(w.slug)}
+                        onFocus={() => setHoveredWork(w.slug)}
+                        onBlur={() => setHoveredWork(null)}
+                        className={cn(
+                          "flex items-baseline gap-x-4 py-2 font-normal transition-opacity duration-300",
+                          hoveredWork && hoveredWork !== w.slug && "opacity-40",
+                        )}
+                      >
+                        <span className="text-white/40">
+                          <ScrambleText
+                            text={pad(w.index)}
+                            active={hoveredWork === w.slug}
+                            className="font-normal"
+                          />
+                        </span>
+                        {/* Clipped rather than ellipsised: the scramble needs
+                            the title as one unbroken line. */}
+                        <span className="min-w-0 overflow-hidden">
+                          <ScrambleText
+                            text={w.title}
+                            active={hoveredWork === w.slug}
+                            className="font-normal"
+                          />
+                        </span>
+                      </TransitionLink>
+                    </li>
+                  ))}
+                </ol>
+                <TransitionLink href="/works" className="w-fit">
+                  <ScrambleText text="view all works →" />
+                </TransitionLink>
+              </nav>
             </div>
-
-            <h1
-              ref={addToSlideupTextRefs}
-              className={`h1-responsive cursor-default ${drukWide.className}`}
-            >
-              azlhart
-            </h1>
           </div>
         </div>
 
-        <LogoSVG refs={[logoRef, logoPathRef]} className="opacity-50" />
+        <LogoSVG
+          refs={[logoRef, logoPathRef]}
+          className="opacity-50"
+          interactive
+        />
       </div>
     </section>
   );

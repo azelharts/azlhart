@@ -1,0 +1,246 @@
+export const metadata = {
+  title: "The recording that stopped itself",
+  summary:
+    "How I hardened a browser recorder that is mounted once and shared by every session, so one recording's late cleanup can't stop the next one, old takes can't leak into new ones, and a stalled upload can't hang forever.",
+  context: "Enterprise mentoring platform",
+  role: "Frontend engineer",
+  stack: [
+    "Next.js 15",
+    "React 19",
+    "TypeScript",
+    "MediaRecorder",
+    "IndexedDB",
+    "S3 multipart",
+  ],
+  year: "2026",
+  readingTime: "9 min read",
+  highlights: [
+    "One recorder instance serves every session, so a slow stop from one take could stop the next recording.",
+    "An epoch counter, snapshotted at the stop click, gates every shared UI write while A's audio still uploads.",
+    "Takes no longer leak into each other, stalled uploads now time out and retry, and recovered audio plays back.",
+  ],
+};
+
+Some bugs only show up when real people use a feature every day. A browser recorder is full of them, because it sits right where async callbacks, storage, the network and user impatience all meet.
+
+The product is a mentoring module inside a larger HR platform. A mentor and a mentee schedule a 1-on-1, and when they meet the browser records it: the microphone for an in-person session, or the microphone mixed with a shared meeting tab for an online one. The audio goes to object storage in parts, and an AI pipeline turns it into a transcript, a summary and a list of commitments.
+
+I didn't build the recorder. Teammates wrote the IndexedDB chunk store, the recording engine and the upload queue, and when I joined the feature it already had the right shape. My job was to extend it and harden it.
+
+In this article, I'll walk you through the bugs worth writing down: a recording that stopped itself, leftovers from previous takes, uploads that never failed, and the work it took to get the audio back out.
+
+## What was already there
+
+Let's start with the design, because the rest of this article depends on it:
+
+- `MediaRecorder` emits a chunk every 3 seconds. Each chunk goes through a serialised promise queue into IndexedDB, keyed by `[sessionId, chunkIndex]`.
+- Chunks are grouped into parts. When a part reaches 5 MB, the S3 multipart minimum, it rolls over onto a separate serial upload queue: presign, `PUT`, then register the part and its ETag with the backend.
+- Capture never waits for the network. A slow connection only makes the upload queue fall behind.
+- If a session is interrupted, a recovery dialog offers **Resume** or **Finish & upload**.
+
+One more detail turns out to matter more than any of these. The engine is a single hook instance mounted at the layout level. It lives as long as the mentoring area is open, and its refs carry over from one session to the next.
+
+Keep that in mind. It's behind almost everything that follows.
+
+## The problem: a recording that stopped itself
+
+The bug report was short: "the recording stops by itself." It didn't happen often, and when it did it was always the **second** recording a person made without reloading the page.
+
+Stopping a recording isn't instant. After `stop()`, the engine waits for the chunk queue to drain, waits another 2 seconds so the last chunks are written, flushes and uploads the remaining parts, calls the API, and only then writes `status: "completed"` into the shared recording state. On a slow connection that takes a while.
+
+If the user finished recording A and started recording B in that window, A's tail eventually wrote "completed" over B's live state. The UI read that as "B is done" and stopped it.
+
+The obvious guard is a session ID check, but it doesn't work here. **Resume** continues the same session with the same recording ID, so an interrupted recording that has been resumed looks exactly like the stale tail of its own earlier attempt. IDs say _what_ is being recorded. They don't say _which capture_ is running.
+
+Here's how the fix below keeps a late stop away from the next recording:
+
+<Flow
+  caption="How a late stop tail is kept away from the next take"
+  nodes={[
+    { id: "stop", label: "Stop requested", note: "snapshot epoch" },
+    { id: "tail", label: "Stop tail", note: "drains queue" },
+    { id: "persist", label: "Upload A's audio", note: "A's snapshot IDs" },
+    { id: "next", label: "B starts or resumes", note: "epoch + 1" },
+    { id: "check", label: "Epoch unchanged?" },
+    { id: "ui", label: "Write completed", note: "else skip" },
+  ]}
+  layout={[
+    ["stop", "tail", "persist"],
+    ["next", "check", "ui"],
+  ]}
+  edges={[
+    ["stop", "tail"],
+    ["tail", "persist", "always"],
+    ["tail", "check"],
+    ["next", "check", "bumps epoch"],
+    ["check", "ui", "if current"],
+  ]}
+/>
+
+### A generation number for every capture
+
+The fix is a monotonic **epoch**: one counter that goes up every time a capture starts, whether that's a fresh recording or a resume. Here's the core of it:
+
+```ts
+const epochRef = useRef(0);
+
+async function startCapture(sessionId: number) {
+  epochRef.current += 1; // before the first await
+  await clearStaleChunks(sessionId);
+  // ... acquire devices, start the recorder
+}
+
+async function resumeCapture(meta: SessionMeta) {
+  epochRef.current += 1; // same IDs, new generation
+  // ...
+}
+```
+
+Notice where the bump happens. It runs **synchronously, before the first `await`**. If it came after an await, an old tail could resume during that gap and still see the epoch it was waiting for.
+
+Pausing and un-pausing deliberately do _not_ bump it. That's the same capture, and a normal stop after a pause still has to write "completed".
+
+### Snapshot at the click, not in the handler
+
+The other half is deciding _when_ a stopping recording captures its identity. The first instinct is to read the epoch at the top of the `onstop` handler. That's too late: `onstop` runs a task later, after the processing queue drains, and B can start and bump the epoch before that.
+
+So the snapshot is taken in the stop-request function itself, synchronously, while the refs still belong to A:
+
+```ts
+function requestStop() {
+  stopSnapshot.current = {
+    epoch: epochRef.current,
+    recordingId: recordingIdRef.current,
+    sessionId: sessionIdRef.current,
+  };
+  recorder.stop();
+}
+
+async function onStopTail() {
+  const snap = stopSnapshot.current;
+  const isCurrent = () => epochRef.current === snap.epoch;
+
+  await drainQueue();
+  await uploadRemaining(snap.sessionId, snap.recordingId); // always A's audio
+  await markProcessed(snap.recordingId);
+
+  if (isCurrent()) setState({ status: "completed" }); // only if nothing replaced A
+}
+```
+
+The tail now does two different kinds of work, and they are treated differently. **Persistence** always runs, against A's snapshot IDs, so A's audio is never dropped just because the user moved on. **Shared UI writes** (status, focus mode, the error state) are each gated on `isCurrent()`.
+
+A stale tail finishes its own job and leaves B alone.
+
+The newer version of the session page has its own finalise flow, so the engine exposes the same idea as two small functions, `captureEpoch()` and `isEpochCurrent(epoch)`, and that flow gates its writes the same way.
+
+<Callout label="lesson">
+  When one long-lived instance serves many short-lived jobs, an ID tells you
+  what a callback is about, not whether it's still the job in charge. Version
+  the job, capture the version where the user acted, and check it before every
+  shared write.
+</Callout>
+
+## Leftovers from the previous take
+
+Making the engine long-lived exposed a second class of bug: state from one take leaking into the next.
+
+### The in-memory part map
+
+Before a part reaches 5 MB, its chunks sit in an in-memory map, waiting for rollover. That map was cleared on rollover and by a full reset, but a normal stop followed by a new start went through neither.
+
+If take one ended with 3 MB in its last part, those bytes were still in the map when take two began, and take two's first part started with the end of take one. A purge of the session's IndexedDB chunks already ran on a fresh start, but the in-memory map didn't get the same treatment.
+
+Clearing it in the fresh-start path fixed it. The resume path deliberately doesn't clear it, because a resumed recording has to keep its in-flight part.
+
+### Scoping chunks to an attempt
+
+Storage had the same problem at a larger scale. Chunks were keyed only by `[sessionId, chunkIndex]`. A long first attempt that failed left chunks 1 to 40 behind. A shorter second attempt on the same session wrote chunks 1 to 12, and anything that later read "all chunks for this session" got the new 1 to 12 plus the old 13 to 40.
+
+Each chunk now carries the `recordingId` of the attempt that wrote it, and every read goes through one small filter:
+
+```ts
+function scopeToAttempt<T extends { recordingId?: number }>(
+  chunks: T[],
+  attemptId: number | null | undefined,
+): T[] {
+  if (attemptId == null) return chunks; // nothing to scope to
+  return chunks.filter(
+    (c) => c.recordingId == null || c.recordingId === attemptId,
+  );
+}
+```
+
+Look at the `c.recordingId == null` branch. Chunks with no `recordingId` were written before the field existed, so they're treated as belonging to the current attempt. Without that, a user recovering an old recording after the deploy would have found nothing.
+
+A companion function picks the newest attempt from the chunks themselves. It's needed because the session's metadata row is deleted after a successful process while the chunks stay behind, so a later retry has only the chunks to go on.
+
+### Whose recording is this?
+
+These are office machines, and some of them are shared. The session metadata now stores who recorded it, so recovery only offers a recording to the person who made it.
+
+## Uploads that never fail
+
+The upload helper sends each part with a plain `fetch` `PUT` to a presigned URL. It already did one thing well: it saved the ETag locally _before_ registering the part, so a failed registration could be retried without uploading the bytes again.
+
+What it didn't have was a deadline. On a dropped connection, or behind a proxy that swallows the request body, the `PUT` promise never settles. It doesn't fail either.
+
+The registration never happens, the queue never advances, and the session sits on "recording" with no error for any recovery path to catch. This was behind reports of recordings "stuck uploading" or "in progress on another device".
+
+Here's the upload with a timeout and retries added:
+
+```ts
+const PUT_TIMEOUT_MS = 60_000;
+const MAX_ATTEMPTS = 3;
+
+async function putWithRetry(url: string, body: Blob): Promise<string> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), PUT_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        method: "PUT",
+        body,
+        signal: ctrl.signal,
+      });
+      if (!res.ok) throw new Error(`PUT failed: ${res.status}`);
+      return readEtag(res);
+    } catch (err) {
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) await sleep(1000 * 2 ** (attempt - 1)); // 1 s, 2 s
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError;
+}
+```
+
+Each attempt gets its own `AbortController`, and the `finally` block clears the timer whether the request succeeded or not. Between attempts it backs off for 1 second, then 2.
+
+A 5 MB part uploads in seconds on any working connection, so 60 seconds per attempt is generous. The point isn't speed. It's that a hang becomes an error, and errors already had a recovery path. Short glitches are absorbed by the retries, and a real outage now fails so the existing timeout-and-retry flow can take over.
+
+## Getting the audio back out
+
+Recovery isn't finished until a person can listen to the audio or download it. The browser made that harder than expected.
+
+**A resumed recording is several files glued together.** Each `MediaRecorder` session starts with its own WebM header, so a recording that was interrupted and resumed is several WebM streams back to back. A native `<audio>` element plays the first one and stops at the second header. The preview player scans the bytes for the EBML magic `1A 45 DF A3`, cuts the blob at each match with `Blob.slice`, and plays the pieces in sequence. Those four bytes can also turn up inside audio data, so a match only counts if the `webm` DocType follows within 64 bytes.
+
+**The duration is a guess.** `MediaRecorder` writes a live WebM with no duration in the header. A guess based on metadata once showed 4:54 for an hour-long take. The reliable approach is to make the browser scan the file: load it, and if the duration reads `Infinity`, seek to `1e101`. That forces the browser to compute the real end, and a 15-second timeout covers browsers that never answer. The download then has its header patched with that value, using a duration-fixing library that is loaded only when someone downloads.
+
+**Safari downloads were empty.** On Safari, blobs read back from IndexedDB are lazy references, and `new Blob([stored])` produced a 0-byte file. That meant the recovery download handed people an empty recording they could never re-upload. Reading each chunk through `FileReader.readAsArrayBuffer` forces Safari to load the real bytes. That path runs on Safari only, and other browsers keep the cheaper direct concatenation.
+
+**Storage is finite.** Before recording, the page calls `navigator.storage.estimate()` and converts the free space into minutes at roughly 16 KB/s. Under 10 minutes it shows a warning, and under 60 seconds the warning becomes critical. It never blocks. Stopping someone from recording a meeting that's already started is worse than warning them.
+
+## Wrapping up
+
+Here's what I'd keep from this work, and what I'd do differently:
+
+- **Keep the epoch, and keep it boring.** It's one integer, bumped before the first await and read at the click. It fixed the most visible bug in the feature, and the tests for it are short.
+- **Keep persistence and presentation separate in async tails.** "Save A's audio" and "tell the UI A finished" are different promises. Only the second one should depend on what's happening now.
+- **Give every network call a deadline.** The retry logic was already there. It just never ran, because nothing ever failed.
+
+What I'd explore next: a lot of the playback work is the client making up for a container the backend stores as is. Remuxing multi-segment recordings into one clean file on the server would make most of it unnecessary. I diagnosed that, but the server-side fix hasn't been built.
+
+For a ground-up take on the same problem in a different product, see [a recorder that survives the crash](/works/crash-safe-recorder). I hope this saves you from your own self-stopping recording.

@@ -1,0 +1,202 @@
+export const metadata = {
+  title: "Writing a WebM remuxer in TypeScript",
+  summary:
+    "An interrupted and resumed recording is several WebM files glued end to end, and players give up at the second header. Here's how a small EBML parser stitches them into one seekable file in the browser, without re-encoding a single frame.",
+  context: "Enterprise talent platform",
+  role: "Frontend engineer",
+  stack: ["TypeScript", "WebM / EBML", "Opus", "IndexedDB", "Vue 3", "Vitest"],
+  year: "2026",
+  readingTime: "8 min read",
+  highlights: [
+    "A resumed recording is several WebM files glued together, and players stop at the second header.",
+    "A small TypeScript EBML parser copies frames byte for byte and rewrites only the cluster timecodes.",
+    "Two 61-minute sessions became one seekable file in 145 ms, with per-part files as the fallback.",
+  ],
+};
+
+Sometimes a "small" feature turns out to need a file format parser. This is one of those stories.
+
+The product is a talent-management system for a large state-owned enterprise. Its 1-on-1 workspace records coaching sessions in the browser and keeps the audio in IndexedDB, three seconds at a time, until it's uploaded for AI analysis. The [first article](/works/crash-safe-recorder) covers how that storage works.
+
+For a while the upload path was under maintenance, so recordings lived only on the device. People needed to keep a copy. The plan was simple: a download button, an inline preview, and a page listing every recording kept in this browser.
+
+In this article, I'll walk you through why the first two needed a WebM remuxer, and how I wrote one in TypeScript that joins recordings without touching the audio.
+
+## The problem
+
+A recording that was interrupted and resumed isn't one recording. Every resume starts a new `MediaRecorder` session, and every session writes a complete WebM file: its own EBML header, its own Segment, and timestamps that start again at zero. The stored chunks are those files concatenated byte for byte.
+
+Here's what that looks like on disk:
+
+<Diagram caption="What is on disk after one interruption">{`
+session 1                              session 2
+EBML | Segment | Info | Tracks | Cluster t=0 ...   EBML | Segment | Info | Tracks | Cluster t=0 ...
+                                                   ^
+                                                   a normal player stops here
+`}</Diagram>
+
+A normal player reads the first file, reaches the second EBML header and stops. In my tests a 7-second recording played as 3 seconds, and the player had no total duration to show.
+
+The in-house audio package that the recorder already used could patch the Duration header, but only for single-session files. On a multi-session file the patch applied to the first segment and **corrupted the bytes**: in one test an 8,067-byte segment came out as 8,066 bytes, and the joined file read as 2.88 seconds instead of 4.44. So the download path reads the chunks straight from IndexedDB and leaves that patch out.
+
+What we need is a remuxer: take the sessions apart and put them back together as one file, without touching the audio.
+
+Here's the path from stored chunks to one playable file:
+
+<Flow
+  caption="How sessions become one file"
+  nodes={[
+    { id: "chunks", label: "Stored chunks", note: "sessions glued" },
+    { id: "parse", label: "EBML parser", note: "split segments" },
+    { id: "sig", label: "Tracks signature", note: "must all match" },
+    { id: "copy", label: "Copy clusters", note: "frames untouched" },
+    { id: "shift", label: "Shift timecodes", note: "by prior duration" },
+    { id: "out", label: "One seekable file", note: "real Duration" },
+    { id: "parts", label: "One file per part", note: "fallback" },
+  ]}
+  layout={[["chunks", "parse", "sig"], ["copy", "shift", "out"], ["parts"]]}
+  edges={[
+    ["chunks", "parse"],
+    ["parse", "sig"],
+    ["sig", "copy", "match"],
+    ["copy", "shift"],
+    ["shift", "out"],
+    ["sig", "parts", "mismatch"],
+  ]}
+/>
+
+## Reading just enough EBML
+
+WebM is Matroska, and Matroska is EBML: a tree of elements, each an ID, a size and a payload. Both the ID and the size are **variable-length integers**. The number of leading zero bits in the first byte gives the length, from one byte to eight.
+
+Let's start with the function that reads one of those integers:
+
+```ts
+function readVarInt(bytes: Uint8Array, pos: number, keepMarker: boolean) {
+  const first = bytes[pos];
+  let length = 1;
+  let mask = 0x80;
+  while (length <= 8 && (first & mask) === 0) {
+    length++;
+    mask >>= 1;
+  }
+  if (length > 8 || pos + length > bytes.length) return null;
+
+  const payload = first & (mask - 1);
+  let value = keepMarker ? first : payload; // IDs keep the marker bit
+  let allOnes = payload === mask - 1;
+  for (let i = 1; i < length; i++) {
+    value = value * 256 + bytes[pos + i];
+    if (bytes[pos + i] !== 0xff) allOnes = false;
+  }
+  return { value, length, unknownSize: !keepMarker && allOnes };
+}
+```
+
+It looks like a textbook TLV parser, but two details make it harder.
+
+**IDs and sizes are read differently.** An element ID keeps its length-marker bit, so `0x1F43B675` stays `0x1F43B675` (Cluster). A size drops it. Same encoding, one flag.
+
+**Sizes can be "unknown".** A size whose payload bits are all ones means "I don't know how long I am yet". `MediaRecorder` writes it on purpose, because it streams and can't go back to fill in sizes.
+
+An unknown-size Cluster ends where the next **top-level** element begins: another Cluster, Cues, Tags, or the next file's EBML header. The parser keeps a set of those IDs and stops a cluster as soon as it meets one.
+
+The parser also has to cope with damaged tails. A session cut short by a closed tab can end in the middle of a frame. A truncated element at the end is dropped, instead of the whole file being rejected.
+
+## Remuxing instead of re-encoding
+
+With the elements readable, the merge doesn't need to understand Opus at all. The plan has four steps:
+
+1. Take the EBML header, Info and Tracks from the **first** segment.
+2. Copy every Cluster's frames from every segment **byte for byte**.
+3. Rewrite only each Cluster's Timecode, shifted by the total duration of the segments before it.
+4. Write the real total into Info's `Duration` field as a float.
+
+Here's the core of that loop:
+
+```ts
+let offset = 0;
+for (const segment of segments) {
+  const times = segment.clusters.flatMap((c) => c.frameTimes);
+  if (times.length === 0) continue;
+  const { start, end } = timeRange(times);
+
+  for (const cluster of segment.clusters) {
+    const tc = element(
+      ID_TIMECODE,
+      encodeUint(cluster.timecode - start + offset),
+    );
+    out.push(encodeId(ID_CLUSTER), UNKNOWN_SIZE, tc, cluster.body);
+  }
+  offset += end - start + lastFrameLength(times, segment.timecodeScale);
+}
+const info = element(
+  ID_INFO,
+  concat([first.infoBody, floatElement(ID_DURATION, offset)]),
+);
+```
+
+Notice that `cluster.body` goes into the output untouched. Around it, we only write a Cluster ID, a size marker and the shifted Timecode.
+
+Frame times come from each SimpleBlock (or the Block inside a BlockGroup): a signed 16-bit offset relative to its Cluster's Timecode. The segment's span runs from its earliest frame to its latest, **plus the length of that last frame**. Otherwise every join would overlap by one frame.
+
+WebM doesn't store frame length, so it's estimated from the last measured step between frames, with 20 ms (a common Opus frame) as the fallback when a segment has only one frame.
+
+The output Clusters are written with unknown size, the same way `MediaRecorder` writes them, so their bodies can be copied without recomputing any lengths.
+
+The Duration is computed from frames actually present, not from the recorder's clock. If the clock and the audio disagree, the file should describe the audio.
+
+## Refusing segments that can't be joined
+
+Copying frames from one session into another only works if both were encoded the same way. Before merging, each segment's Tracks element is reduced to a **signature**: every leaf value in order, with `TrackUID` left out, since it's random per session. Codec, sample rate, channel count and `TimecodeScale` all have to match.
+
+If any segment differs, or fails to parse, the function returns `null`. The caller then falls back to one file per part, each with its own correct duration.
+
+Downloads are spaced 400 ms apart, because several downloads in one tick make Chrome ask for permission and make Safari block all but the first.
+
+## Failing soft everywhere
+
+A download that fails is worse than a download that is imperfect, so every step that can go wrong has a fallback:
+
+- **A Safari clean-up step that threw on Chrome.** The audio package has a fix for Safari's "looping" recordings, whose blobs repeat everything before them. Run on a healthy Chrome file, it threw "Cluster too large to encode: NaN bytes". It now runs per segment inside `try/catch`, and on failure the original bytes are used.
+- **The merge itself.** A throw inside the remuxer is treated like an incompatible segment: fall back to per-part files.
+- **A limit hidden in `Math.min(...times)`.** Spreading an array into function arguments has an engine limit, roughly 65 thousand in Safari and 125 thousand in V8. A long recording has more frames than that, and the download failed with a `RangeError`. Review caught it, and the range is now found in a plain loop.
+- **Reading the chunks.** Each chunk is read with its own `arrayBuffer()` call and copied into one buffer. Besides being straightforward, that forces Safari's lazy IndexedDB blobs to materialise, which is where they otherwise read back as empty.
+
+## Putting it together in the preview
+
+The interrupted-recording dialog got a "Play preview" button, and a new page lists every recording kept in this browser with play, download and delete. Both use the **same merged file** as the download, so one `<audio>` element plays an interrupted recording to the end and can seek anywhere in it. Parts that can't be merged play back to back on one slider.
+
+The gallery raised a review finding of its own. Office browsers are shared between colleagues. The first version read a session's chunks without checking who recorded them, so user B could download or play user A's audio.
+
+Reads now require proof of ownership from the session's metadata row first, then filter each chunk by owner as well. No metadata means no proof, and nothing is returned.
+
+<Stats
+  items={[
+    { value: "2 × 61 min", label: "Interrupted test recording" },
+    { value: "500", label: "Chunks merged" },
+    { value: "145 ms", label: "To build the download" },
+  ]}
+/>
+
+So how did it hold up? The end-to-end check in Chrome used a real interrupted recording: two sessions of 61 minutes each, stored as 500 chunks. It downloaded in 145 ms as one file with a duration of 2:02:09.48, which ffmpeg decoded without errors.
+
+A 4.44-second interrupted recording and a 61-minute one both loaded in the preview with the right length and played to the end, including after seeking to 50:00 in the long one.
+
+<Callout label="lesson">
+  When a container format gets in the way, you often need much less of the spec
+  than you'd expect. About 400 lines that understand IDs, sizes and timestamps
+  were enough, because the audio itself never had to be touched.
+</Callout>
+
+## Wrapping up
+
+We started with recordings that stopped playing at the second header, wrote a variable-length integer reader that handles unknown sizes, merged segments by copying frames and rewriting only timecodes, and wrapped every step in a fallback. Here's what I'd keep:
+
+- **Remux, don't re-encode.** Copying frames keeps quality identical, keeps it fast, and keeps the scope to a few element types.
+- **Return `null` instead of guessing.** Refusing to merge incompatible segments, and falling back to separate files, is better than a file that plays but sounds wrong.
+- **Measure duration from the frames.** It's the only number that's guaranteed to match what the player will play.
+
+What I'd explore next is the format itself. The cleaner long-term fix is to avoid producing multi-session files at all, or to merge on the server where ffmpeg is available. The remuxer exists because the recording had to be usable while the upload was down. Later, a teammate split the parser functions up to reduce their complexity; the behaviour stayed the same.
+
+Merged audio is only safe to send if a single device owns the recording. The [next article](/works/recording-lease) covers how the server makes sure only one browser records a session at a time. Happy parsing!
